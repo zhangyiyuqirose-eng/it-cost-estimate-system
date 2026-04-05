@@ -5,7 +5,6 @@ import {
   Steps,
   Upload,
   Button,
-  Space,
   Typography,
   message,
   Form,
@@ -15,7 +14,8 @@ import {
   DatePicker,
   Row,
   Col,
-  Alert,
+  Tag,
+  Tooltip,
 } from 'antd'
 import {
   InboxOutlined,
@@ -24,6 +24,11 @@ import {
   PlusOutlined,
   DeleteOutlined,
   TeamOutlined,
+  DollarOutlined,
+  CameraOutlined,
+  ArrowRightOutlined,
+  InfoCircleOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons'
 import type { UploadProps, UploadFile } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -64,6 +69,32 @@ interface MemberFormData {
   dailyCost: number
   entryTime: string | null
   leaveTime: string | null
+}
+
+// 信息项组件
+interface InfoItemProps {
+  label: string
+  value: React.ReactNode
+  icon?: React.ReactNode
+}
+
+function InfoItem({ label, value, icon }: InfoItemProps) {
+  return (
+    <div
+      style={{
+        padding: 16,
+        borderRadius: 12,
+        background: '#f8fafc',
+        border: '1px solid #f1f5f9',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        {icon && <span style={{ color: '#64748b' }}>{icon}</span>}
+        <Text type="secondary" style={{ fontSize: 13 }}>{label}</Text>
+      </div>
+      <Text strong style={{ fontSize: 16, color: '#0f172a' }}>{value}</Text>
+    </div>
+  )
 }
 
 export default function CostConsumptionInput() {
@@ -138,7 +169,7 @@ export default function CostConsumptionInput() {
         setOcrSuccess(true)
         message.success('OCR识别成功，请核对信息')
       }
-    } catch (error) {
+    } catch {
       message.error('OCR识别失败，请重试')
     } finally {
       setOcrLoading(false)
@@ -181,7 +212,7 @@ export default function CostConsumptionInput() {
           value={value}
           onChange={(v) => handleMemberChange(record.key, 'name', v)}
           placeholder="请输入姓名"
-          style={{ width: '100%' }}
+          style={{ width: '100%', borderRadius: 8 }}
         />
       ),
     },
@@ -206,9 +237,17 @@ export default function CostConsumptionInput() {
       key: 'dailyCost',
       width: 120,
       render: (value: number) => (
-        <Text style={{ color: '#165DFF' }}>
+        <Tag
+          style={{
+            borderRadius: 8,
+            background: '#3B82F615',
+            color: '#3B82F6',
+            border: 'none',
+            fontWeight: 500,
+          }}
+        >
           {value ? value.toFixed(2) : '-'}
-        </Text>
+        </Tag>
       ),
     },
     {
@@ -222,7 +261,7 @@ export default function CostConsumptionInput() {
           onChange={(date) =>
             handleMemberChange(record.key, 'entryTime', date ? date.format('YYYY-MM-DD') : null)
           }
-          style={{ width: '100%' }}
+          style={{ width: '100%', borderRadius: 8 }}
           placeholder="选择日期"
         />
       ),
@@ -238,7 +277,7 @@ export default function CostConsumptionInput() {
           onChange={(date) =>
             handleMemberChange(record.key, 'leaveTime', date ? date.format('YYYY-MM-DD') : null)
           }
-          style={{ width: '100%' }}
+          style={{ width: '100%', borderRadius: 8 }}
           placeholder="选择日期"
         />
       ),
@@ -341,7 +380,7 @@ export default function CostConsumptionInput() {
         setCurrentStep(1)
         navigate(`/cost-consumption/result?projectId=${actualProjectId}`)
       }
-    } catch (error) {
+    } catch {
       message.error('核算失败，请检查数据')
     } finally {
       setSaving(false)
@@ -351,53 +390,153 @@ export default function CostConsumptionInput() {
   return (
     <div className="page-container">
       {/* 步骤条 */}
-      <Card className="card-margin">
-        <Steps current={currentStep} items={stepItems} style={{ marginBottom: 24 }} />
+      <Card
+        style={{
+          borderRadius: 16,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <Steps current={currentStep} items={stepItems} style={{ marginBottom: 8 }} />
       </Card>
 
+      {/* 功能介绍区域 */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+          borderRadius: 20,
+          padding: '32px 40px',
+          marginBottom: 24,
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.1)' }} />
+        <div style={{ position: 'absolute', bottom: -80, right: 100, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.05)' }} />
+
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 24 }}>
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 16,
+              background: 'rgba(255, 255, 255, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <DollarOutlined style={{ fontSize: 32, color: '#fff' }} />
+          </div>
+          <div>
+            <Title level={3} style={{ color: '#fff', margin: 0, marginBottom: 8 }}>
+              成本消耗预估
+            </Title>
+            <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 15 }}>
+              上传OA截图智能识别，实时追踪成本消耗，预测燃尽时间
+            </Text>
+          </div>
+        </div>
+      </div>
+
       {/* OA截图上传区域 */}
-      <Card className="card-margin">
-        <Title level={4} style={{ marginBottom: 16 }}>
-          OA截图上传
-        </Title>
+      <Card
+        style={{
+          borderRadius: 20,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ marginBottom: 20 }}>
+          <Title level={4} style={{ marginBottom: 4, fontWeight: 600 }}>
+            <CameraOutlined style={{ marginRight: 8, color: '#10B981' }} />
+            OA截图上传
+          </Title>
+          <Text type="secondary">上传OA系统截图，AI自动识别项目财务信息</Text>
+        </div>
 
         <Dragger {...draggerProps} disabled={ocrLoading}>
           <p className="ant-upload-drag-icon">
-            <InboxOutlined style={{ color: '#165DFF', fontSize: 48 }} />
+            <InboxOutlined style={{ color: '#10B981', fontSize: 48 }} />
           </p>
-          <p className="ant-upload-text">点击或拖拽图片到此区域上传</p>
-          <p className="ant-upload-hint">支持多张图片上传，格式为 JPG/PNG/WEBP</p>
+          <p className="ant-upload-text" style={{ fontSize: 16, fontWeight: 500, color: '#0f172a' }}>
+            点击或拖拽图片到此区域上传
+          </p>
+          <p className="ant-upload-hint" style={{ color: '#64748b' }}>
+            支持多张图片上传，格式为 JPG/PNG/WEBP
+          </p>
         </Dragger>
 
         {/* OCR识别按钮 */}
-        <div style={{ marginTop: 16, textAlign: 'center' }}>
+        <div style={{ marginTop: 20, textAlign: 'center' }}>
           <Button
             type="primary"
+            size="large"
             onClick={handleOcrRecognize}
             loading={ocrLoading}
             disabled={fileList.length === 0}
+            style={{
+              borderRadius: 12,
+              height: 44,
+              background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+              border: 'none',
+              fontWeight: 600,
+            }}
           >
+            <CameraOutlined style={{ marginRight: 8 }} />
             开始OCR识别
           </Button>
         </div>
 
         {/* OCR成功提示 */}
         {ocrSuccess && (
-          <Alert
-            type="success"
-            message="OCR识别成功"
-            description="已自动填充识别结果，请核对并修正数据"
-            showIcon
-            style={{ marginTop: 16 }}
-          />
+          <Card
+            style={{
+              marginTop: 20,
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(52, 211, 153, 0.1) 100%)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 12,
+                  background: '#10B981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <CheckCircleOutlined style={{ fontSize: 24, color: '#fff' }} />
+              </div>
+              <div>
+                <Text strong style={{ fontSize: 16, color: '#10B981' }}>OCR识别成功</Text>
+                <br />
+                <Text type="secondary">已自动填充识别结果，请核对并修正数据</Text>
+              </div>
+            </div>
+          </Card>
         )}
       </Card>
 
       {/* OCR识别结果展示表单 */}
-      <Card className="card-margin">
-        <Title level={4} style={{ marginBottom: 16 }}>
-          项目信息
-        </Title>
+      <Card
+        style={{
+          borderRadius: 20,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ marginBottom: 20 }}>
+          <Title level={4} style={{ marginBottom: 4, fontWeight: 600 }}>
+            <DollarOutlined style={{ marginRight: 8, color: '#3B82F6' }} />
+            项目信息
+          </Title>
+          <Text type="secondary">请核对OCR识别结果或手动输入项目财务数据</Text>
+        </div>
 
         <Form form={form} layout="vertical" initialValues={{
           contractAmount: 0,
@@ -410,21 +549,35 @@ export default function CostConsumptionInput() {
           <Row gutter={24}>
             <Col xs={24} sm={12} md={8}>
               <Form.Item
-                label="合同金额(万元)"
+                label={
+                  <span>
+                    合同金额(万元)
+                    <Tooltip title="项目合同总金额">
+                      <InfoCircleOutlined style={{ color: '#64748b', marginLeft: 4 }} />
+                    </Tooltip>
+                  </span>
+                }
                 name="contractAmount"
                 rules={[{ required: true, message: '请输入合同金额' }]}
               >
                 <InputNumber
                   min={0}
                   precision={2}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', borderRadius: 8 }}
                   placeholder="请输入合同金额"
                 />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
               <Form.Item
-                label="售前比例"
+                label={
+                  <span>
+                    售前比例
+                    <Tooltip title="售前成本占总合同的比例，如 0.15 表示 15%">
+                      <InfoCircleOutlined style={{ color: '#64748b', marginLeft: 4 }} />
+                    </Tooltip>
+                  </span>
+                }
                 name="preSaleRatio"
                 rules={[{ required: true, message: '请输入售前比例' }]}
               >
@@ -432,14 +585,21 @@ export default function CostConsumptionInput() {
                   min={0}
                   max={1}
                   precision={4}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', borderRadius: 8 }}
                   placeholder="如: 0.15"
                 />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
               <Form.Item
-                label="税率"
+                label={
+                  <span>
+                    税率
+                    <Tooltip title="项目税率，如 0.06 表示 6%">
+                      <InfoCircleOutlined style={{ color: '#64748b', marginLeft: 4 }} />
+                    </Tooltip>
+                  </span>
+                }
                 name="taxRate"
                 rules={[{ required: true, message: '请输入税率' }]}
               >
@@ -447,46 +607,67 @@ export default function CostConsumptionInput() {
                   min={0}
                   max={1}
                   precision={4}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', borderRadius: 8 }}
                   placeholder="如: 0.06"
                 />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
               <Form.Item
-                label="外采人力成本(万元)"
+                label={
+                  <span>
+                    外采人力成本(万元)
+                    <Tooltip title="外包人力成本">
+                      <InfoCircleOutlined style={{ color: '#64748b', marginLeft: 4 }} />
+                    </Tooltip>
+                  </span>
+                }
                 name="externalLaborCost"
               >
                 <InputNumber
                   min={0}
                   precision={2}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', borderRadius: 8 }}
                   placeholder="请输入外采人力成本"
                 />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
               <Form.Item
-                label="外采软件成本(万元)"
+                label={
+                  <span>
+                    外采软件成本(万元)
+                    <Tooltip title="外包软件采购成本">
+                      <InfoCircleOutlined style={{ color: '#64748b', marginLeft: 4 }} />
+                    </Tooltip>
+                  </span>
+                }
                 name="externalSoftwareCost"
               >
                 <InputNumber
                   min={0}
                   precision={2}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', borderRadius: 8 }}
                   placeholder="请输入外采软件成本"
                 />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
               <Form.Item
-                label="当前人力成本(万元)"
+                label={
+                  <span>
+                    当前人力成本(万元)
+                    <Tooltip title="已消耗的人力成本">
+                      <InfoCircleOutlined style={{ color: '#64748b', marginLeft: 4 }} />
+                    </Tooltip>
+                  </span>
+                }
                 name="currentManpowerCost"
               >
                 <InputNumber
                   min={0}
                   precision={2}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', borderRadius: 8 }}
                   placeholder="请输入当前人力成本"
                 />
               </Form.Item>
@@ -496,11 +677,20 @@ export default function CostConsumptionInput() {
       </Card>
 
       {/* 项目成员列表表格 */}
-      <Card className="card-margin">
-        <Title level={4} style={{ marginBottom: 16 }}>
-          <TeamOutlined style={{ marginRight: 8 }} />
-          项目成员列表
-        </Title>
+      <Card
+        style={{
+          borderRadius: 20,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ marginBottom: 20 }}>
+          <Title level={4} style={{ marginBottom: 4, fontWeight: 600 }}>
+            <TeamOutlined style={{ marginRight: 8, color: '#8B5CF6' }} />
+            项目成员列表
+          </Title>
+          <Text type="secondary">添加项目成员信息，系统将自动计算人力成本</Text>
+        </div>
 
         <Table
           columns={memberColumns}
@@ -516,11 +706,21 @@ export default function CostConsumptionInput() {
                     <Text strong>合计</Text>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={1}>
-                    <Text strong>{members.length} 人</Text>
+                    <Tag
+                      style={{
+                        borderRadius: 8,
+                        background: '#8B5CF615',
+                        color: '#8B5CF6',
+                        border: 'none',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {members.length} 人
+                    </Tag>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={2}>
-                    <Text strong style={{ color: '#165DFF' }}>
-                      {members.reduce((sum, m) => sum + (m.dailyCost || 0), 0).toFixed(2)}
+                    <Text strong style={{ color: '#3B82F6' }}>
+                      {members.reduce((sum, m) => sum + (m.dailyCost || 0), 0).toFixed(2)} 万/天
                     </Text>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={3} />
@@ -536,22 +736,50 @@ export default function CostConsumptionInput() {
           type="dashed"
           icon={<PlusOutlined />}
           onClick={handleAddMember}
-          style={{ marginTop: 16, width: '100%' }}
+          style={{
+            marginTop: 16,
+            width: '100%',
+            borderRadius: 12,
+            height: 44,
+            borderStyle: 'dashed',
+          }}
         >
           新增成员
         </Button>
       </Card>
 
       {/* 操作按钮 */}
-      <Card>
-        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Button onClick={() => navigate('/dashboard')}>
+      <Card
+        style={{
+          borderRadius: 16,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Button
+            size="large"
+            onClick={() => navigate('/dashboard')}
+            style={{ borderRadius: 12, height: 44 }}
+          >
             返回首页
           </Button>
-          <Button type="primary" onClick={handleCalculate} loading={saving}>
+          <Button
+            type="primary"
+            size="large"
+            onClick={handleCalculate}
+            loading={saving}
+            style={{
+              borderRadius: 12,
+              height: 44,
+              background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+              border: 'none',
+              fontWeight: 600,
+            }}
+          >
             开始核算
+            <ArrowRightOutlined style={{ marginLeft: 8 }} />
           </Button>
-        </Space>
+        </div>
       </Card>
     </div>
   )

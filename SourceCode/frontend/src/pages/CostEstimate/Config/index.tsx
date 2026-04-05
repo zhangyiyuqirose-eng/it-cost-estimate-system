@@ -6,13 +6,14 @@ import {
   Form,
   InputNumber,
   Button,
-  Space,
   Typography,
   message,
   Spin,
   Row,
   Col,
   Table,
+  Tag,
+  Tooltip,
 } from 'antd'
 import {
   FileTextOutlined,
@@ -20,6 +21,11 @@ import {
   BarChartOutlined,
   SaveOutlined,
   CalculatorOutlined,
+  InfoCircleOutlined,
+  ArrowLeftOutlined,
+  ArrowRightOutlined,
+  ThunderboltOutlined,
+  RocketOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { estimateApi } from '@/api'
@@ -32,7 +38,7 @@ import type {
   UnitPrice,
 } from '@/types'
 
-const { Text } = Typography
+const { Title, Text } = Typography
 
 // 步骤条配置
 const stepItems = [
@@ -100,6 +106,38 @@ const defaultUnitPriceConfig: UnitPrice[] = [
   { role: '运维工程师', price: 1000 },
 ]
 
+// 配置卡片标题组件
+interface ConfigCardHeaderProps {
+  title: string
+  subtitle: string
+  icon: React.ReactNode
+  color: string
+}
+
+function ConfigCardHeader({ title, subtitle, icon, color }: ConfigCardHeaderProps) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+      <div
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 12,
+          background: `${color}15`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <span style={{ fontSize: 24, color }}>{icon}</span>
+      </div>
+      <div>
+        <Title level={5} style={{ margin: 0, fontWeight: 600 }}>{title}</Title>
+        <Text type="secondary" style={{ fontSize: 13 }}>{subtitle}</Text>
+      </div>
+    </div>
+  )
+}
+
 export default function CostEstimateConfig() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -135,7 +173,7 @@ export default function CostEstimateConfig() {
             setManagementCoefficient(config.managementCoefficient || 0.15)
           }
         }
-      } catch (error) {
+      } catch {
         // 使用默认配置
         message.info('使用默认配置参数')
       } finally {
@@ -168,7 +206,7 @@ export default function CostEstimateConfig() {
       if (response.data.code === 0 || response.data.code === 200) {
         message.success('配置保存成功')
       }
-    } catch (error) {
+    } catch {
       message.error('配置保存失败')
     } finally {
       setSaving(false)
@@ -205,7 +243,7 @@ export default function CostEstimateConfig() {
           navigate(`/cost-estimate/result?projectId=${projectId}`)
         }, 1000)
       }
-    } catch (error) {
+    } catch {
       message.error('计算失败，请检查配置参数')
     } finally {
       setCalculating(false)
@@ -219,6 +257,29 @@ export default function CostEstimateConfig() {
       dataIndex: 'level',
       key: 'level',
       width: 120,
+      render: (value: string) => {
+        const colors: Record<string, string> = {
+          '简单': '#10B981',
+          '一般': '#3B82F6',
+          '中等': '#F59E0B',
+          '复杂': '#EF4444',
+          '极复杂': '#8B5CF6',
+        }
+        return (
+          <Tag
+            style={{
+              borderRadius: 8,
+              padding: '4px 12px',
+              background: `${colors[value] || '#64748b'}15`,
+              color: colors[value] || '#64748b',
+              border: 'none',
+              fontWeight: 500,
+            }}
+          >
+            {value}
+          </Tag>
+        )
+      },
     },
     {
       title: '基准人天',
@@ -235,7 +296,7 @@ export default function CostEstimateConfig() {
             newConfig[index].workdays = val || 1
             setComplexityConfig(newConfig)
           }}
-          style={{ width: '100%' }}
+          style={{ width: '100%', borderRadius: 8 }}
         />
       ),
     },
@@ -248,6 +309,9 @@ export default function CostEstimateConfig() {
       dataIndex: 'systemCount',
       key: 'systemCount',
       width: 120,
+      render: (value: number) => (
+        <Text strong style={{ color: '#3B82F6' }}>{value} 个</Text>
+      ),
     },
     {
       title: '系数',
@@ -266,7 +330,7 @@ export default function CostEstimateConfig() {
             newConfig[index].coefficient = val || 1
             setSystemCoefficientConfig(newConfig)
           }}
-          style={{ width: '100%' }}
+          style={{ width: '100%', borderRadius: 8 }}
         />
       ),
     },
@@ -279,6 +343,22 @@ export default function CostEstimateConfig() {
       dataIndex: 'stage',
       key: 'stage',
       width: 120,
+      render: (value: string) => {
+        const icons: Record<string, React.ReactNode> = {
+          '需求分析': '📋',
+          '系统设计': '🎨',
+          '开发实现': '💻',
+          '测试验证': '🧪',
+          '部署上线': '🚀',
+          '运维保障': '🔧',
+        }
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>{icons[value] || '📌'}</span>
+            <Text>{value}</Text>
+          </div>
+        )
+      },
     },
     {
       title: '系数',
@@ -297,7 +377,7 @@ export default function CostEstimateConfig() {
             newConfig[index].coefficient = val || 0.1
             setProcessCoefficientConfig(newConfig)
           }}
-          style={{ width: '100%' }}
+          style={{ width: '100%', borderRadius: 8 }}
         />
       ),
     },
@@ -310,6 +390,28 @@ export default function CostEstimateConfig() {
       dataIndex: 'techType',
       key: 'techType',
       width: 120,
+      render: (value: string) => {
+        const colors: Record<string, string> = {
+          '常规技术': '#64748b',
+          '新技术应用': '#3B82F6',
+          '技术改造': '#F59E0B',
+          '技术集成': '#8B5CF6',
+          '前沿技术': '#EF4444',
+        }
+        return (
+          <Tag
+            style={{
+              borderRadius: 8,
+              padding: '4px 12px',
+              background: `${colors[value] || '#64748b'}15`,
+              color: colors[value] || '#64748b',
+              border: 'none',
+            }}
+          >
+            {value}
+          </Tag>
+        )
+      },
     },
     {
       title: '系数',
@@ -328,7 +430,7 @@ export default function CostEstimateConfig() {
             newConfig[index].coefficient = val || 1
             setTechStackCoefficientConfig(newConfig)
           }}
-          style={{ width: '100%' }}
+          style={{ width: '100%', borderRadius: 8 }}
         />
       ),
     },
@@ -341,6 +443,9 @@ export default function CostEstimateConfig() {
       dataIndex: 'role',
       key: 'role',
       width: 120,
+      render: (value: string) => (
+        <Text style={{ fontWeight: 500, color: '#0f172a' }}>{value}</Text>
+      ),
     },
     {
       title: '单价(元/天)',
@@ -358,7 +463,9 @@ export default function CostEstimateConfig() {
             newConfig[index].price = val || 1000
             setUnitPriceConfig(newConfig)
           }}
-          style={{ width: '100%' }}
+          style={{ width: '100%', borderRadius: 8 }}
+          formatter={(val) => `¥${val}`}
+          parser={(val) => Number(val?.replace('¥', '') || 0)}
         />
       ),
     },
@@ -367,7 +474,7 @@ export default function CostEstimateConfig() {
   if (loading) {
     return (
       <div className="page-container">
-        <Card>
+        <Card style={{ borderRadius: 16 }}>
           <Spin size="large" tip="加载默认配置..." />
         </Card>
       </div>
@@ -377,18 +484,72 @@ export default function CostEstimateConfig() {
   return (
     <div className="page-container">
       {/* 步骤条 */}
-      <Card className="card-margin">
-        <Steps current={currentStep} items={stepItems} />
+      <Card
+        style={{
+          borderRadius: 16,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <Steps current={currentStep} items={stepItems} style={{ marginBottom: 8 }} />
       </Card>
+
+      {/* 功能介绍区域 */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+          borderRadius: 20,
+          padding: '32px 40px',
+          marginBottom: 24,
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.1)' }} />
+        <div style={{ position: 'absolute', bottom: -80, right: 100, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.05)' }} />
+
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 24 }}>
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 16,
+              background: 'rgba(255, 255, 255, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <SettingOutlined style={{ fontSize: 32, color: '#fff' }} />
+          </div>
+          <div>
+            <Title level={3} style={{ color: '#fff', margin: 0, marginBottom: 8 }}>
+              参数配置
+            </Title>
+            <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 15 }}>
+              根据项目实际情况调整计算参数，获得更精准的成本预估结果
+            </Text>
+          </div>
+        </div>
+      </div>
 
       {/* 配置卡片 */}
       <Row gutter={[24, 24]}>
         {/* 复杂度基准配置 */}
         <Col xs={24} lg={12}>
           <Card
-            title="复杂度基准配置"
-            extra={<Text type="secondary">各复杂度等级对应基准人天</Text>}
+            style={{
+              borderRadius: 20,
+              border: '1px solid #f1f5f9',
+              height: '100%',
+            }}
           >
+            <ConfigCardHeader
+              title="复杂度基准配置"
+              subtitle="各复杂度等级对应基准人天"
+              icon={<CalculatorOutlined />}
+              color="#3B82F6"
+            />
             <Table
               columns={complexityColumns}
               dataSource={complexityConfig}
@@ -402,9 +563,18 @@ export default function CostEstimateConfig() {
         {/* 系统关联度系数配置 */}
         <Col xs={24} lg={12}>
           <Card
-            title="系统关联度系数配置"
-            extra={<Text type="secondary">关联系统数量对应系数</Text>}
+            style={{
+              borderRadius: 20,
+              border: '1px solid #f1f5f9',
+              height: '100%',
+            }}
           >
+            <ConfigCardHeader
+              title="系统关联度系数"
+              subtitle="关联系统数量对应系数"
+              icon={<ThunderboltOutlined />}
+              color="#8B5CF6"
+            />
             <Table
               columns={systemCoefficientColumns}
               dataSource={systemCoefficientConfig}
@@ -418,9 +588,18 @@ export default function CostEstimateConfig() {
         {/* 流程系数配置 */}
         <Col xs={24} lg={12}>
           <Card
-            title="流程系数配置"
-            extra={<Text type="secondary">各阶段工作量分配系数</Text>}
+            style={{
+              borderRadius: 20,
+              border: '1px solid #f1f5f9',
+              height: '100%',
+            }}
           >
+            <ConfigCardHeader
+              title="流程系数配置"
+              subtitle="各阶段工作量分配系数"
+              icon={<RocketOutlined />}
+              color="#10B981"
+            />
             <Table
               columns={processCoefficientColumns}
               dataSource={processCoefficientConfig}
@@ -434,9 +613,18 @@ export default function CostEstimateConfig() {
         {/* 技术栈难度系数配置 */}
         <Col xs={24} lg={12}>
           <Card
-            title="技术栈难度系数配置"
-            extra={<Text type="secondary">不同技术类型难度系数</Text>}
+            style={{
+              borderRadius: 20,
+              border: '1px solid #f1f5f9',
+              height: '100%',
+            }}
           >
+            <ConfigCardHeader
+              title="技术栈难度系数"
+              subtitle="不同技术类型难度系数"
+              icon={<InfoCircleOutlined />}
+              color="#F59E0B"
+            />
             <Table
               columns={techStackCoefficientColumns}
               dataSource={techStackCoefficientConfig}
@@ -450,9 +638,18 @@ export default function CostEstimateConfig() {
         {/* 人天单价配置 */}
         <Col xs={24} lg={12}>
           <Card
-            title="人天单价配置"
-            extra={<Text type="secondary">各角色人天单价(元)</Text>}
+            style={{
+              borderRadius: 20,
+              border: '1px solid #f1f5f9',
+              height: '100%',
+            }}
           >
+            <ConfigCardHeader
+              title="人天单价配置"
+              subtitle="各角色人天单价(元)"
+              icon={<CalculatorOutlined />}
+              color="#EF4444"
+            />
             <Table
               columns={unitPriceColumns}
               dataSource={unitPriceConfig}
@@ -466,51 +663,89 @@ export default function CostEstimateConfig() {
         {/* 管理系数配置 */}
         <Col xs={24} lg={12}>
           <Card
-            title="管理系数配置"
-            extra={<Text type="secondary">项目管理成本系数</Text>}
+            style={{
+              borderRadius: 20,
+              border: '1px solid #f1f5f9',
+              height: '100%',
+            }}
           >
-            <Form layout="inline">
-              <Form.Item label="管理系数" style={{ marginBottom: 0 }}>
-                <InputNumber
-                  min={0}
-                  max={0.5}
-                  step={0.01}
-                  precision={2}
-                  value={managementCoefficient}
-                  onChange={(val) => setManagementCoefficient(val || 0.15)}
-                  style={{ width: 150 }}
-                />
-              </Form.Item>
-              <Text type="secondary" style={{ marginLeft: 16 }}>
-                建议范围: 0.10 - 0.20
+            <ConfigCardHeader
+              title="管理系数配置"
+              subtitle="项目管理成本系数"
+              icon={<SettingOutlined />}
+              color="#64748b"
+            />
+            <div style={{ padding: '16px 0' }}>
+              <Form layout="inline">
+                <Form.Item label="管理系数" style={{ marginBottom: 0 }}>
+                  <InputNumber
+                    min={0}
+                    max={0.5}
+                    step={0.01}
+                    precision={2}
+                    value={managementCoefficient}
+                    onChange={(val) => setManagementCoefficient(val || 0.15)}
+                    style={{ width: 150, borderRadius: 8 }}
+                  />
+                </Form.Item>
+                <Tooltip title="管理系数用于计算项目管理成本，建议范围 0.10 - 0.20">
+                  <InfoCircleOutlined style={{ color: '#64748b', marginLeft: 8 }} />
+                </Tooltip>
+              </Form>
+              <Text type="secondary" style={{ marginTop: 12, display: 'block' }}>
+                建议范围: 0.10 - 0.20，当前值: {managementCoefficient.toFixed(2)}
               </Text>
-            </Form>
+            </div>
           </Card>
         </Col>
       </Row>
 
       {/* 操作按钮 */}
-      <Card style={{ marginTop: 24 }}>
-        <Space>
-          <Button onClick={() => navigate('/cost-estimate/upload')}>
+      <Card
+        style={{
+          borderRadius: 16,
+          marginTop: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Button
+            size="large"
+            onClick={() => navigate('/cost-estimate/upload')}
+            style={{ borderRadius: 12, height: 44 }}
+          >
+            <ArrowLeftOutlined style={{ marginRight: 8 }} />
             上一步：文件上传
           </Button>
-          <Button
-            icon={<SaveOutlined />}
-            onClick={handleSaveConfig}
-            loading={saving}
-          >
-            保存参数模板
-          </Button>
-          <Button
-            type="primary"
-            icon={<CalculatorOutlined />}
-            onClick={handleCalculate}
-            loading={calculating}
-          >
-            开始计算
-          </Button>
-        </Space>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <Button
+              size="large"
+              icon={<SaveOutlined />}
+              onClick={handleSaveConfig}
+              loading={saving}
+              style={{ borderRadius: 12, height: 44 }}
+            >
+              保存参数模板
+            </Button>
+            <Button
+              type="primary"
+              size="large"
+              icon={<CalculatorOutlined />}
+              onClick={handleCalculate}
+              loading={calculating}
+              style={{
+                borderRadius: 12,
+                height: 44,
+                background: 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)',
+                border: 'none',
+                fontWeight: 600,
+              }}
+            >
+              开始计算
+              <ArrowRightOutlined style={{ marginLeft: 8 }} />
+            </Button>
+          </div>
+        </div>
       </Card>
     </div>
   )

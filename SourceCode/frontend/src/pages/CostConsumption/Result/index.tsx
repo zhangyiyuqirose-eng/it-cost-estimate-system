@@ -4,21 +4,19 @@ import {
   Card,
   Steps,
   Button,
-  Space,
   Typography,
   message,
   Spin,
   Row,
   Col,
-  Statistic,
   Table,
   Tag,
-  Alert,
-  Descriptions,
   DatePicker,
   Select,
   Empty,
   InputNumber,
+  Tooltip,
+  Progress,
 } from 'antd'
 import {
   FormOutlined,
@@ -29,6 +27,12 @@ import {
   ReloadOutlined,
   ExclamationCircleOutlined,
   TeamOutlined,
+  DollarOutlined,
+  FireOutlined,
+  CalendarOutlined,
+  TrendingUpOutlined,
+  ArrowLeftOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -68,6 +72,87 @@ interface MemberFormData {
   dailyCost: number
   entryTime: string | null
   leaveTime: string | null
+}
+
+// 统计卡片组件
+interface StatCardProps {
+  title: string
+  value: number | string
+  suffix?: string
+  precision?: number
+  icon: React.ReactNode
+  color: string
+  gradient: string
+  status?: 'success' | 'warning' | 'error' | 'normal'
+}
+
+function StatCard({ title, value, suffix, precision, icon, color, gradient, status }: StatCardProps) {
+  return (
+    <Card
+      style={{
+        borderRadius: 16,
+        border: '1px solid #f1f5f9',
+        height: '100%',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          background: gradient,
+          padding: '20px 16px',
+          borderRadius: 12,
+          marginBottom: 16,
+        }}
+      >
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            background: 'rgba(255, 255, 255, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 8,
+          }}
+        >
+          <span style={{ fontSize: 22, color: '#fff' }}>{icon}</span>
+        </div>
+        <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}>{title}</Text>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <Text
+          strong
+          style={{
+            fontSize: 28,
+            color,
+            fontWeight: 700,
+          }}
+        >
+          {typeof value === 'number' && precision ? value.toFixed(precision) : value}
+        </Text>
+        {suffix && (
+          <Text type="secondary" style={{ fontSize: 13, marginLeft: 4 }}>
+            {suffix}
+          </Text>
+        )}
+        {status === 'error' && (
+          <Tag
+            icon={<ExclamationCircleOutlined />}
+            style={{
+              marginLeft: 8,
+              borderRadius: 8,
+              background: '#EF4444',
+              color: '#fff',
+              border: 'none',
+            }}
+          >
+            已超支
+          </Tag>
+        )}
+      </div>
+    </Card>
+  )
 }
 
 export default function CostConsumptionResult() {
@@ -116,7 +201,7 @@ export default function CostConsumptionResult() {
             )
           }
         }
-      } catch (error) {
+      } catch {
         message.error('获取结果数据失败')
       } finally {
         setLoading(false)
@@ -141,7 +226,7 @@ export default function CostConsumptionResult() {
           value={value}
           onChange={(v) => handleMemberChange(record.key, 'name', v)}
           placeholder="请输入姓名"
-          style={{ width: '100%' }}
+          style={{ width: '100%', borderRadius: 8 }}
         />
       ),
     },
@@ -166,9 +251,17 @@ export default function CostConsumptionResult() {
       key: 'dailyCost',
       width: 120,
       render: (value: number) => (
-        <Text style={{ color: '#165DFF' }}>
+        <Tag
+          style={{
+            borderRadius: 8,
+            background: '#3B82F615',
+            color: '#3B82F6',
+            border: 'none',
+            fontWeight: 500,
+          }}
+        >
           {value ? value.toFixed(2) : '-'}
-        </Text>
+        </Tag>
       ),
     },
     {
@@ -182,7 +275,7 @@ export default function CostConsumptionResult() {
           onChange={(date) =>
             handleMemberChange(record.key, 'entryTime', date ? date.format('YYYY-MM-DD') : null)
           }
-          style={{ width: '100%' }}
+          style={{ width: '100%', borderRadius: 8 }}
           placeholder="选择日期"
         />
       ),
@@ -198,7 +291,7 @@ export default function CostConsumptionResult() {
           onChange={(date) =>
             handleMemberChange(record.key, 'leaveTime', date ? date.format('YYYY-MM-DD') : null)
           }
-          style={{ width: '100%' }}
+          style={{ width: '100%', borderRadius: 8 }}
           placeholder="选择日期"
         />
       ),
@@ -301,7 +394,7 @@ export default function CostConsumptionResult() {
           )
         }
       }
-    } catch (error) {
+    } catch {
       message.error('重新计算失败')
     } finally {
       setRecalculating(false)
@@ -330,7 +423,7 @@ export default function CostConsumptionResult() {
 
       message.success('项目保存成功')
       navigate('/dashboard')
-    } catch (error) {
+    } catch {
       message.error('项目保存失败')
     } finally {
       setSaving(false)
@@ -343,7 +436,7 @@ export default function CostConsumptionResult() {
   if (loading) {
     return (
       <div className="page-container">
-        <Card>
+        <Card style={{ borderRadius: 16 }}>
           <Spin size="large" tip="加载结果数据..." />
         </Card>
       </div>
@@ -353,15 +446,32 @@ export default function CostConsumptionResult() {
   if (!result) {
     return (
       <div className="page-container">
-        <Card>
+        <Card style={{ borderRadius: 16, marginBottom: 24 }}>
           <Steps current={currentStep} items={stepItems} />
         </Card>
-        <Card style={{ marginTop: 24 }}>
-          <Empty description="暂无结果数据，请先完成信息录入" />
+        <Card
+          style={{
+            borderRadius: 20,
+            border: '1px solid #f1f5f9',
+            textAlign: 'center',
+            padding: 48,
+          }}
+        >
+          <BarChartOutlined style={{ fontSize: 48, color: '#64748b', marginBottom: 16 }} />
+          <Title level={4} style={{ marginBottom: 8 }}>暂无结果数据</Title>
+          <Text type="secondary" style={{ marginBottom: 24 }}>
+            请先完成信息录入
+          </Text>
           <Button
             type="primary"
+            size="large"
             onClick={() => navigate('/cost-consumption/input')}
-            style={{ marginTop: 16 }}
+            style={{
+              borderRadius: 12,
+              height: 44,
+              background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+              border: 'none',
+            }}
           >
             前往信息录入
           </Button>
@@ -373,141 +483,370 @@ export default function CostConsumptionResult() {
   return (
     <div className="page-container">
       {/* 步骤条 */}
-      <Card className="card-margin">
-        <Steps current={currentStep} items={stepItems} style={{ marginBottom: 24 }} />
+      <Card
+        style={{
+          borderRadius: 16,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <Steps current={currentStep} items={stepItems} style={{ marginBottom: 8 }} />
       </Card>
 
+      {/* 功能介绍区域 */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+          borderRadius: 20,
+          padding: '32px 40px',
+          marginBottom: 24,
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.1)' }} />
+        <div style={{ position: 'absolute', bottom: -80, right: 100, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.05)' }} />
+
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 24 }}>
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 16,
+              background: 'rgba(255, 255, 255, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <BarChartOutlined style={{ fontSize: 32, color: '#fff' }} />
+          </div>
+          <div>
+            <Title level={3} style={{ color: '#fff', margin: 0, marginBottom: 8 }}>
+              成本核算结果
+            </Title>
+            <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 15 }}>
+              查看成本消耗详情，调整人员配置优化成本结构
+            </Text>
+          </div>
+        </div>
+      </div>
+
       {/* 核心指标卡片 */}
-      <Row gutter={[24, 24]}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={12} sm={6}>
-          <Card>
-            <Statistic
-              title="可消耗成本(万元)"
-              value={result.availableCost}
-              precision={2}
-              valueStyle={{
-                color: isOverBudget ? '#F53F3F' : '#00B42A',
-              }}
-              suffix={isOverBudget ? (
-                <Tag color="error" icon={<ExclamationCircleOutlined />} style={{ marginLeft: 8 }}>
-                  已超支
-                </Tag>
-              ) : null}
-            />
-          </Card>
+          <StatCard
+            title="可消耗成本"
+            value={result.availableCost}
+            suffix="万元"
+            precision={2}
+            icon={<DollarOutlined />}
+            color={isOverBudget ? '#EF4444' : '#10B981'}
+            gradient={isOverBudget ? 'linear-gradient(135deg, #EF4444 0%, #F87171 100%)' : 'linear-gradient(135deg, #10B981 0%, #34D399 100%)'}
+            status={isOverBudget ? 'error' : 'success'}
+          />
         </Col>
         <Col xs={12} sm={6}>
-          <Card>
-            <Statistic
-              title="日人力成本(万元)"
-              value={result.dailyManpowerCost}
-              precision={2}
-              valueStyle={{ color: '#165DFF' }}
-            />
-          </Card>
+          <StatCard
+            title="日人力成本"
+            value={result.dailyManpowerCost}
+            suffix="万元"
+            precision={2}
+            icon={<TrendingUpOutlined />}
+            color="#3B82F6"
+            gradient="linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)"
+          />
         </Col>
         <Col xs={12} sm={6}>
-          <Card>
-            <Statistic
-              title="可消耗天数"
-              value={result.availableDays}
-              precision={1}
-              suffix="天"
-              valueStyle={{
-                color: result.availableDays > 0 ? '#00B42A' : '#F53F3F',
-              }}
-            />
-          </Card>
+          <StatCard
+            title="可消耗天数"
+            value={result.availableDays}
+            suffix="天"
+            precision={1}
+            icon={<CalendarOutlined />}
+            color={result.availableDays > 0 ? '#10B981' : '#EF4444'}
+            gradient="linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)"
+          />
         </Col>
         <Col xs={12} sm={6}>
-          <Card>
-            <Statistic
-              title="燃尽日期"
-              value={result.burnoutDate || '-'}
-              valueStyle={{
-                color: result.burnoutDate ? '#FF7D00' : '#86909C',
-              }}
-            />
-          </Card>
+          <StatCard
+            title="燃尽日期"
+            value={result.burnoutDate || '-'}
+            icon={<FireOutlined />}
+            color={result.burnoutDate ? '#F59E0B' : '#64748b'}
+            gradient="linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)"
+          />
         </Col>
       </Row>
 
       {/* 超支警告 */}
       {isOverBudget && (
-        <Alert
-          type="error"
-          message="成本超支警告"
-          description="当前可消耗成本为负数，项目已超支。请调整人员配置或重新核算。"
-          showIcon
-          style={{ marginTop: 24 }}
-        />
+        <Card
+          style={{
+            borderRadius: 16,
+            marginBottom: 24,
+            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(248, 113, 113, 0.1) 100%)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 12,
+                background: '#EF4444',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <ExclamationCircleOutlined style={{ fontSize: 24, color: '#fff' }} />
+            </div>
+            <div>
+              <Text strong style={{ fontSize: 16, color: '#EF4444' }}>成本超支警告</Text>
+              <br />
+              <Text type="secondary">当前可消耗成本为负数，项目已超支。请调整人员配置或重新核算。</Text>
+            </div>
+          </div>
+        </Card>
       )}
 
       {/* 计算公式说明卡片 */}
-      <Card className="card-margin" style={{ marginTop: 24 }}>
-        <Title level={4} style={{ marginBottom: 16 }}>
-          计算公式说明
-        </Title>
-        <Descriptions column={1} bordered>
-          <Descriptions.Item label="可消耗成本">
-            <Text code>
-              合同金额 × (1 - 售前比例) × (1 - 税率) - 外采人力成本 - 外采软件成本 - 当前人力成本
-            </Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="日人力成本">
-            <Text code>
-              Σ(成员日成本) = 成员等级对应日成本之和
-            </Text>
-            <Text type="secondary" style={{ marginLeft: 8 }}>
-              (P5: 0.16, P6: 0.21, P7: 0.26, P8: 0.36 万元/天)
-            </Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="可消耗天数">
-            <Text code>
-              可消耗成本 / 日人力成本
-            </Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="燃尽日期">
-            <Text code>
-              当前日期 + 可消耗天数
-            </Text>
-          </Descriptions.Item>
-        </Descriptions>
+      <Card
+        style={{
+          borderRadius: 20,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ marginBottom: 20 }}>
+          <Title level={4} style={{ marginBottom: 4, fontWeight: 600 }}>
+            <DollarOutlined style={{ marginRight: 8, color: '#3B82F6' }} />
+            计算公式说明
+          </Title>
+          <Text type="secondary">了解成本核算的计算逻辑</Text>
+        </div>
+
+        <Row gutter={[16, 16]}>
+          <Col xs={24} md={12}>
+            <div
+              style={{
+                padding: 20,
+                borderRadius: 12,
+                background: '#f8fafc',
+                border: '1px solid #f1f5f9',
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                可消耗成本
+              </Text>
+              <Text code style={{ fontSize: 13 }}>
+                合同金额 × (1 - 售前比例) × (1 - 税率) - 外采成本 - 当前人力成本
+              </Text>
+            </div>
+          </Col>
+          <Col xs={24} md={12}>
+            <div
+              style={{
+                padding: 20,
+                borderRadius: 12,
+                background: '#f8fafc',
+                border: '1px solid #f1f5f9',
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                日人力成本
+              </Text>
+              <Text code style={{ fontSize: 13 }}>
+                Σ(成员日成本) = P5:0.16, P6:0.21, P7:0.26, P8:0.36 万/天
+              </Text>
+            </div>
+          </Col>
+          <Col xs={24} md={12}>
+            <div
+              style={{
+                padding: 20,
+                borderRadius: 12,
+                background: '#f8fafc',
+                border: '1px solid #f1f5f9',
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                可消耗天数
+              </Text>
+              <Text code style={{ fontSize: 13 }}>
+                可消耗成本 / 日人力成本
+              </Text>
+            </div>
+          </Col>
+          <Col xs={24} md={12}>
+            <div
+              style={{
+                padding: 20,
+                borderRadius: 12,
+                background: '#f8fafc',
+                border: '1px solid #f1f5f9',
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                燃尽日期
+              </Text>
+              <Text code style={{ fontSize: 13 }}>
+                当前日期 + 可消耗天数
+              </Text>
+            </div>
+          </Col>
+        </Row>
       </Card>
 
       {/* 项目基本信息 */}
-      <Card className="card-margin" style={{ marginTop: 24 }}>
-        <Title level={4} style={{ marginBottom: 16 }}>
-          项目基本信息
-        </Title>
-        <Descriptions column={2} bordered>
-          <Descriptions.Item label="合同金额">
-            {result.contractAmount?.toFixed(2) || '-'} 万元
-          </Descriptions.Item>
-          <Descriptions.Item label="售前比例">
-            {result.preSaleRatio ? `${(result.preSaleRatio * 100).toFixed(2)}%` : '-'}
-          </Descriptions.Item>
-          <Descriptions.Item label="税率">
-            {result.taxRate ? `${(result.taxRate * 100).toFixed(2)}%` : '-'}
-          </Descriptions.Item>
-          <Descriptions.Item label="外采人力成本">
-            {result.externalLaborCost?.toFixed(2) || '-'} 万元
-          </Descriptions.Item>
-          <Descriptions.Item label="外采软件成本">
-            {result.externalSoftwareCost?.toFixed(2) || '-'} 万元
-          </Descriptions.Item>
-          <Descriptions.Item label="当前人力成本">
-            {result.currentManpowerCost?.toFixed(2) || '-'} 万元
-          </Descriptions.Item>
-        </Descriptions>
+      <Card
+        style={{
+          borderRadius: 20,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ marginBottom: 20 }}>
+          <Title level={4} style={{ marginBottom: 4, fontWeight: 600 }}>
+            <DollarOutlined style={{ marginRight: 8, color: '#8B5CF6' }} />
+            项目基本信息
+          </Title>
+          <Text type="secondary">项目财务数据概览</Text>
+        </div>
+
+        <Row gutter={[16, 16]}>
+          <Col xs={12} sm={8} md={6}>
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 12,
+                background: '#f8fafc',
+                border: '1px solid #f1f5f9',
+                textAlign: 'center',
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 12 }}>合同金额</Text>
+              <div>
+                <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                  {result.contractAmount?.toFixed(2) || '-'}
+                </Text>
+                <Text type="secondary" style={{ fontSize: 12 }}> 万元</Text>
+              </div>
+            </div>
+          </Col>
+          <Col xs={12} sm={8} md={6}>
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 12,
+                background: '#f8fafc',
+                border: '1px solid #f1f5f9',
+                textAlign: 'center',
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 12 }}>售前比例</Text>
+              <div>
+                <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                  {result.preSaleRatio ? `${(result.preSaleRatio * 100).toFixed(2)}%` : '-'}
+                </Text>
+              </div>
+            </div>
+          </Col>
+          <Col xs={12} sm={8} md={6}>
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 12,
+                background: '#f8fafc',
+                border: '1px solid #f1f5f9',
+                textAlign: 'center',
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 12 }}>税率</Text>
+              <div>
+                <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                  {result.taxRate ? `${(result.taxRate * 100).toFixed(2)}%` : '-'}
+                </Text>
+              </div>
+            </div>
+          </Col>
+          <Col xs={12} sm={8} md={6}>
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 12,
+                background: '#f8fafc',
+                border: '1px solid #f1f5f9',
+                textAlign: 'center',
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 12 }}>外采人力成本</Text>
+              <div>
+                <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                  {result.externalLaborCost?.toFixed(2) || '-'}
+                </Text>
+                <Text type="secondary" style={{ fontSize: 12 }}> 万元</Text>
+              </div>
+            </div>
+          </Col>
+          <Col xs={12} sm={8} md={6}>
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 12,
+                background: '#f8fafc',
+                border: '1px solid #f1f5f9',
+                textAlign: 'center',
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 12 }}>外采软件成本</Text>
+              <div>
+                <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                  {result.externalSoftwareCost?.toFixed(2) || '-'}
+                </Text>
+                <Text type="secondary" style={{ fontSize: 12 }}> 万元</Text>
+              </div>
+            </div>
+          </Col>
+          <Col xs={12} sm={8} md={6}>
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 12,
+                background: '#f8fafc',
+                border: '1px solid #f1f5f9',
+                textAlign: 'center',
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 12 }}>当前人力成本</Text>
+              <div>
+                <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                  {result.currentManpowerCost?.toFixed(2) || '-'}
+                </Text>
+                <Text type="secondary" style={{ fontSize: 12 }}> 万元</Text>
+              </div>
+            </div>
+          </Col>
+        </Row>
       </Card>
 
       {/* 人员方案调整区域 */}
-      <Card className="card-margin" style={{ marginTop: 24 }}>
-        <Title level={4} style={{ marginBottom: 16 }}>
-          <TeamOutlined style={{ marginRight: 8 }} />
-          人员方案调整
-        </Title>
+      <Card
+        style={{
+          borderRadius: 20,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ marginBottom: 20 }}>
+          <Title level={4} style={{ marginBottom: 4, fontWeight: 600 }}>
+            <TeamOutlined style={{ marginRight: 8, color: '#F59E0B' }} />
+            人员方案调整
+          </Title>
+          <Text type="secondary">调整团队成员配置，优化成本结构</Text>
+        </div>
 
         <Table
           columns={memberColumns}
@@ -523,11 +862,21 @@ export default function CostConsumptionResult() {
                     <Text strong>合计</Text>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={1}>
-                    <Text strong>{members.length} 人</Text>
+                    <Tag
+                      style={{
+                        borderRadius: 8,
+                        background: '#8B5CF615',
+                        color: '#8B5CF6',
+                        border: 'none',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {members.length} 人
+                    </Tag>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={2}>
-                    <Text strong style={{ color: '#165DFF' }}>
-                      {members.reduce((sum, m) => sum + (m.dailyCost || 0), 0).toFixed(2)} 万元/天
+                    <Text strong style={{ color: '#3B82F6' }}>
+                      {members.reduce((sum, m) => sum + (m.dailyCost || 0), 0).toFixed(2)} 万/天
                     </Text>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={3} />
@@ -539,11 +888,12 @@ export default function CostConsumptionResult() {
           }
         />
 
-        <Space style={{ marginTop: 16, width: '100%', justifyContent: 'space-between' }}>
+        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button
             type="dashed"
             icon={<PlusOutlined />}
             onClick={handleAddMember}
+            style={{ borderRadius: 10 }}
           >
             新增成员
           </Button>
@@ -552,27 +902,50 @@ export default function CostConsumptionResult() {
             icon={<ReloadOutlined />}
             onClick={handleRecalculate}
             loading={recalculating}
+            style={{
+              borderRadius: 10,
+              background: 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)',
+              border: 'none',
+            }}
           >
             重新计算
           </Button>
-        </Space>
+        </div>
       </Card>
 
       {/* 操作按钮 */}
-      <Card style={{ marginTop: 24 }}>
-        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Button onClick={() => navigate('/dashboard')}>
+      <Card
+        style={{
+          borderRadius: 16,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Button
+            size="large"
+            onClick={() => navigate('/dashboard')}
+            style={{ borderRadius: 12, height: 44 }}
+          >
+            <ArrowLeftOutlined style={{ marginRight: 8 }} />
             返回首页
           </Button>
           <Button
             type="primary"
+            size="large"
             icon={<SaveOutlined />}
             onClick={handleSaveProject}
             loading={saving}
+            style={{
+              borderRadius: 12,
+              height: 44,
+              background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+              border: 'none',
+              fontWeight: 600,
+            }}
           >
             保存项目
           </Button>
-        </Space>
+        </div>
       </Card>
     </div>
   )

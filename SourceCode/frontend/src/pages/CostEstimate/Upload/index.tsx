@@ -6,7 +6,6 @@ import {
   Upload,
   Button,
   Progress,
-  Alert,
   Space,
   Typography,
   message,
@@ -17,6 +16,9 @@ import {
   SettingOutlined,
   BarChartOutlined,
   CheckCircleOutlined,
+  RocketOutlined,
+  ArrowRightOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons'
 import type { UploadProps, UploadFile } from 'antd'
 import { estimateApi } from '@/api'
@@ -45,10 +47,10 @@ const stepItems = [
 
 // 文档格式要求说明
 const formatRequirements = [
-  '支持文件格式：DOC、DOCX',
-  '文件大小限制：不超过 50MB',
-  '文档内容要求：包含功能模块描述、技术栈信息、系统关联说明',
-  '建议格式：清晰的功能模块划分，明确的技术架构描述',
+  { icon: '📄', text: '支持文件格式：DOC、DOCX' },
+  { icon: '📦', text: '文件大小限制：不超过 50MB' },
+  { icon: '📝', text: '文档内容要求：包含功能模块描述、技术栈信息' },
+  { icon: '✨', text: '建议格式：清晰的功能模块划分，明确的技术架构描述' },
 ]
 
 export default function CostEstimateUpload() {
@@ -150,26 +152,81 @@ export default function CostEstimateUpload() {
   return (
     <div className="page-container">
       {/* 步骤条 */}
-      <Card className="card-margin">
-        <Steps
-          current={currentStep}
-          items={stepItems}
-          style={{ marginBottom: 24 }}
-        />
+      <Card
+        style={{
+          borderRadius: 16,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <Steps current={currentStep} items={stepItems} style={{ marginBottom: 8 }} />
       </Card>
 
+      {/* 功能介绍区域 */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)',
+          borderRadius: 20,
+          padding: '32px 40px',
+          marginBottom: 24,
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.1)' }} />
+        <div style={{ position: 'absolute', bottom: -80, right: 100, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.05)' }} />
+
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 24 }}>
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 16,
+              background: 'rgba(255, 255, 255, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <RocketOutlined style={{ fontSize: 32, color: '#fff' }} />
+          </div>
+          <div>
+            <Title level={3} style={{ color: '#fff', margin: 0, marginBottom: 8 }}>
+              实施成本预估
+            </Title>
+            <Paragraph style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 15, margin: 0 }}>
+              上传需求文档，AI智能解析功能模块，精准计算实施工作量与成本
+            </Paragraph>
+          </div>
+        </div>
+      </div>
+
       {/* 上传区域 */}
-      <Card className="card-margin">
-        <Title level={4} style={{ marginBottom: 16 }}>
-          上传需求文档
-        </Title>
+      <Card
+        style={{
+          borderRadius: 20,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ marginBottom: 20 }}>
+          <Title level={4} style={{ marginBottom: 4, fontWeight: 600 }}>
+            <FileTextOutlined style={{ marginRight: 8, color: '#3B82F6' }} />
+            上传需求文档
+          </Title>
+          <Text type="secondary">请上传包含功能需求描述的文档文件</Text>
+        </div>
 
         <Dragger {...draggerProps} disabled={uploading}>
           <p className="ant-upload-drag-icon">
-            <InboxOutlined style={{ color: '#165DFF', fontSize: 48 }} />
+            <InboxOutlined style={{ color: '#3B82F6', fontSize: 48 }} />
           </p>
-          <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
-          <p className="ant-upload-hint">仅支持 DOC/DOCX 格式的需求文档</p>
+          <p className="ant-upload-text" style={{ fontSize: 16, fontWeight: 500, color: '#0f172a' }}>
+            点击或拖拽文件到此区域上传
+          </p>
+          <p className="ant-upload-hint" style={{ color: '#64748b' }}>
+            仅支持 DOC/DOCX 格式的需求文档
+          </p>
         </Dragger>
 
         {/* 上传进度 */}
@@ -179,8 +236,8 @@ export default function CostEstimateUpload() {
               percent={uploadProgress}
               status={uploadProgress === 100 ? 'success' : 'active'}
               strokeColor={{
-                '0%': '#165DFF',
-                '100%': '#00B42A',
+                '0%': '#3B82F6',
+                '100%': '#10B981',
               }}
             />
             <Text type="secondary">正在上传文件，请稍候...</Text>
@@ -189,50 +246,135 @@ export default function CostEstimateUpload() {
 
         {/* 上传成功提示 */}
         {uploadProgress === 100 && uploadedProjectId && (
-          <Alert
-            type="success"
-            icon={<CheckCircleOutlined />}
-            showIcon
-            message="文档上传成功"
-            description="文件已成功上传，即将跳转到参数配置页面..."
-            style={{ marginTop: 16 }}
-          />
+          <Card
+            style={{
+              marginTop: 16,
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(52, 211, 153, 0.1) 100%)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 12,
+                  background: '#10B981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <CheckCircleOutlined style={{ fontSize: 24, color: '#fff' }} />
+              </div>
+              <div>
+                <Text strong style={{ fontSize: 16, color: '#10B981' }}>文档上传成功</Text>
+                <br />
+                <Text type="secondary">文件已成功上传，即将跳转到参数配置页面...</Text>
+              </div>
+            </div>
+          </Card>
         )}
       </Card>
 
       {/* 格式要求说明 */}
-      <Card className="card-margin">
-        <Title level={4} style={{ marginBottom: 16 }}>
-          文档格式要求
-        </Title>
-        <Space direction="vertical" size="small">
-          {formatRequirements.map((req, index) => (
-            <Text key={index}>
-              <CheckCircleOutlined style={{ color: '#00B42A', marginRight: 8 }} />
-              {req}
-            </Text>
-          ))}
-        </Space>
+      <Card
+        style={{
+          borderRadius: 20,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ marginBottom: 20 }}>
+          <Title level={4} style={{ marginBottom: 4, fontWeight: 600 }}>
+            <InfoCircleOutlined style={{ marginRight: 8, color: '#8B5CF6' }} />
+            文档格式要求
+          </Title>
+          <Text type="secondary">请确保文档符合以下规范，以便系统准确解析</Text>
+        </div>
 
-        <Paragraph type="secondary" style={{ marginTop: 16 }}>
-          请确保上传的文档包含完整的功能需求描述，以便系统能够准确解析和计算实施成本。
-        </Paragraph>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16 }}>
+          {formatRequirements.map((req, index) => (
+            <div
+              key={index}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: 16,
+                borderRadius: 12,
+                background: '#f8fafc',
+                border: '1px solid #f1f5f9',
+              }}
+            >
+              <span style={{ fontSize: 24 }}>{req.icon}</span>
+              <Text style={{ color: '#475569' }}>{req.text}</Text>
+            </div>
+          ))}
+        </div>
+
+        <Card
+          style={{
+            marginTop: 20,
+            borderRadius: 12,
+            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
+            border: '1px solid rgba(59, 130, 246, 0.2)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: '#3B82F6',
+              }}
+            />
+            <Text style={{ color: '#475569' }}>
+              请确保上传的文档包含完整的功能需求描述，以便系统能够准确解析和计算实施成本。
+            </Text>
+          </div>
+        </Card>
       </Card>
 
       {/* 操作按钮 */}
-      <Card>
-        <Space>
-          <Button onClick={() => navigate('/dashboard')}>
+      <Card
+        style={{
+          borderRadius: 16,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Button
+            size="large"
+            onClick={() => navigate('/dashboard')}
+            style={{
+              borderRadius: 12,
+              height: 44,
+            }}
+          >
             返回首页
           </Button>
           <Button
             type="primary"
+            size="large"
             disabled={!uploadedProjectId}
             onClick={() => navigate(`/cost-estimate/config?projectId=${uploadedProjectId}`)}
+            style={{
+              borderRadius: 12,
+              height: 44,
+              background: uploadedProjectId
+                ? 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)'
+                : '#e2e8f0',
+              border: 'none',
+              fontWeight: 600,
+            }}
           >
             下一步：参数配置
+            <ArrowRightOutlined style={{ marginLeft: 8 }} />
           </Button>
-        </Space>
+        </div>
       </Card>
     </div>
   )

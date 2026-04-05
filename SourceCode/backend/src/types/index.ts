@@ -76,6 +76,8 @@ export interface ParseResult {
   modules: ModuleInfo[]
   totalModules: number
   rawText?: string
+  projectName?: string
+  systemName?: string
 }
 
 export interface ModuleInfo {
@@ -84,6 +86,7 @@ export interface ModuleInfo {
   features?: string[]
   complexity?: 'simple' | 'medium' | 'complex'
   estimatedManDays?: number
+  associationSystems?: number
 }
 
 export interface ComplexityConfig {

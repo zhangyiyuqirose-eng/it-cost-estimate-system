@@ -30,7 +30,7 @@ import {
   DollarOutlined,
   FireOutlined,
   CalendarOutlined,
-  TrendingUpOutlined,
+  RiseOutlined,
   ArrowLeftOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons'
@@ -552,7 +552,7 @@ export default function CostConsumptionResult() {
             value={result.dailyManpowerCost}
             suffix="万元"
             precision={2}
-            icon={<TrendingUpOutlined />}
+            icon={<RiseOutlined />}
             color="#3B82F6"
             gradient="linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)"
           />

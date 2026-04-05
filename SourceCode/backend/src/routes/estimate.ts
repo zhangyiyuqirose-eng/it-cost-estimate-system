@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid'
 import mammoth from 'mammoth'
 import prisma from '../config/database'
 import { authMiddleware } from '../middlewares/auth'
+import aiService from '../services/aiService'
 import {
   ApiResponse,
   UploadDocumentResponse,
@@ -62,42 +63,58 @@ const upload = multer({
   }
 })
 
-// ==================== 默认配置 ====================
+// ==================== 默认配置（参考 Python 实现）====================
 
-const DEFAULT_COMPLEXITY_CONFIG: ComplexityConfig = {
-  simple: 2,
-  medium: 5,
-  complex: 10
+const DEFAULT_COMPLEXITY_CONFIG: Record<string, number> = {
+  very_basic: 0.5,
+  basic: 1.0,
+  medium: 1.5,
+  complex: 2.0,
+  very_complex: 2.5
 }
 
-const DEFAULT_SYSTEM_COEFFICIENT: SystemCoefficient = {
-  distributed: 1.2,
-  microservice: 1.3,
-  monomer: 1.0
+const DEFAULT_FLOW_COEFFICIENTS: Record<string, number> = {
+  requirements: 0.7,
+  ui_design: 0.3,
+  tech_design: 0.5,
+  development: 1.2,
+  tech_testing: 0.7,
+  perf_testing: 0.3
 }
 
-const DEFAULT_PROCESS_COEFFICIENT: ProcessCoefficient = {
-  agile: 1.1,
-  waterfall: 1.0,
-  hybrid: 1.05
+const DEFAULT_TECH_STACK_COEFFICIENT = 1.3
+const DEFAULT_MANAGEMENT_COEFFICIENT = 0.15
+const DEFAULT_GO_LIVE_PERCENTAGE = 0.02
+
+const DEFAULT_DAILY_RATES: Record<string, number> = {
+  product_manager: 2000,
+  ui_designer: 1800,
+  frontend_dev: 1800,
+  backend_dev: 2000,
+  func_tester: 1500,
+  perf_tester: 2000,
+  project_manager: 2000
 }
 
-const DEFAULT_TECH_STACK_COEFFICIENT: TechStackCoefficient = {
-  java: 1.0,
-  python: 0.9,
-  nodejs: 0.95,
-  dotnet: 1.0,
-  go: 0.85
-}
+// 阶段定义
+const PHASES = [
+  { key: 'requirements', name: '需求', usesTechStack: false },
+  { key: 'ui_design', name: 'UI设计', usesTechStack: false },
+  { key: 'tech_design', name: '技术设计', usesTechStack: true },
+  { key: 'development', name: '开发', usesTechStack: true },
+  { key: 'tech_testing', name: '技术测试', usesTechStack: true },
+  { key: 'perf_testing', name: '性能测试', usesTechStack: false }
+]
 
-const DEFAULT_UNIT_PRICE_CONFIG: UnitPriceConfig = {
-  P5: 0.8,
-  P6: 1.0,
-  P7: 1.5,
-  P8: 2.0
+// 合规区间
+const COMPLIANCE_RANGES: Record<string, [number, number]> = {
+  '需求': [12, 18],
+  '设计': [12, 20],
+  '开发': [30, 40],
+  '技术测试': [15, 25],
+  '性能测试': [0, 12],
+  '投产上线': [2, 2]
 }
-
-const DEFAULT_MANAGEMENT_COEFFICIENT = 0.2
 
 // ==================== 辅助函数 ====================
 
@@ -136,59 +153,13 @@ const parseDocumentContent = async (filePath: string): Promise<string> => {
 }
 
 /**
- * 从文档文本中提取模块信息
+ * 获取关联度系数（参考 Python 实现）
  */
-const extractModulesFromText = (text: string): ModuleInfo[] => {
-  const modules: ModuleInfo[] = []
-
-  // 简化的模块提取逻辑 - 实际项目中应该使用大模型进行智能解析
-  const lines = text.split('\n')
-  let currentModule: ModuleInfo | null = null
-  const features: string[] = []
-
-  for (const line of lines) {
-    const trimmedLine = line.trim()
-
-    // 检测模块标题 (通常是带有"模块"、"功能"、"子系统"等关键词的行)
-    if (trimmedLine.includes('模块') || trimmedLine.includes('子系统')) {
-      if (currentModule) {
-        currentModule.features = [...features]
-        modules.push(currentModule)
-        features.length = 0
-      }
-      currentModule = {
-        name: trimmedLine,
-        description: '',
-        complexity: 'medium',
-        features: []
-      }
-    } else if (currentModule && trimmedLine.length > 0) {
-      // 收集功能点
-      if (trimmedLine.startsWith('-') || trimmedLine.startsWith('*') || trimmedLine.match(/^\d+\./)) {
-        features.push(trimmedLine.replace(/^-|\*|\d+\.\s*/, '').trim())
-      } else if (!currentModule.description && trimmedLine.length > 20) {
-        currentModule.description = trimmedLine
-      }
-    }
-  }
-
-  // 处理最后一个模块
-  if (currentModule) {
-    currentModule.features = [...features]
-    modules.push(currentModule)
-  }
-
-  // 如果没有检测到模块，创建默认模块
-  if (modules.length === 0 && text.length > 100) {
-    modules.push({
-      name: '核心功能模块',
-      description: '从需求文档自动识别的核心功能',
-      complexity: 'medium',
-      features: ['基础功能', '核心业务', '数据管理']
-    })
-  }
-
-  return modules
+const getAssociationCoefficient = (nSystems: number): number => {
+  if (nSystems <= 1) return 1.0
+  if (nSystems < 3) return 1.5
+  if (nSystems <= 5) return 2.0
+  return 3.0
 }
 
 // ==================== 路由定义 ====================
@@ -205,6 +176,8 @@ router.post('/upload', authMiddleware, upload.single('document'), async (req: Re
     if (!file) {
       return sendError(res, 400, '请上传文档文件')
     }
+
+    console.log(`[Upload] 文件上传成功: ${file.originalname}`)
 
     // 创建项目
     const project = await prisma.project.create({
@@ -241,7 +214,7 @@ router.post('/upload', authMiddleware, upload.single('document'), async (req: Re
 })
 
 /**
- * POST /:projectId/parse - 解析文档
+ * POST /:projectId/parse - 解析文档（使用 AI）
  */
 router.post('/:projectId/parse', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -271,15 +244,34 @@ router.post('/:projectId/parse', authMiddleware, async (req: Request, res: Respo
     // 解析文档内容
     const filePath = path.join(uploadDir, document.docPath || '')
     const text = await parseDocumentContent(filePath)
-    const modules = extractModulesFromText(text)
 
-    // 更新解析结果
+    console.log(`[Parse] 开始 AI 分析，文档长度: ${text.length}`)
+
+    // 使用 AI 解析文档
+    const aiResult = await aiService.parseDocument(text.substring(0, 12000))
+
+    console.log(`[Parse] AI 分析完成，模块数: ${aiResult.modules?.length || 0}`)
+
+    // 转换为内部格式
+    const modules: ModuleInfo[] = (aiResult.modules || []).map((m: any) => ({
+      name: m.name || '未命名模块',
+      description: m.description || '',
+      complexity: mapComplexity(m.complexity),
+      features: (m.functions || m.features || []).map((f: any) =>
+        typeof f === 'string' ? f : f.name || '未命名功能'
+      ),
+      associationSystems: m.association_systems || 1
+    }))
+
     const parseResult: ParseResult = {
       modules,
       totalModules: modules.length,
-      rawText: text.substring(0, 5000) // 保存部分原文用于追溯
+      rawText: text.substring(0, 5000),
+      projectName: aiResult.project_name || document.docName.replace(/\.(doc|docx)$/i, ''),
+      systemName: aiResult.system_name || ''
     }
 
+    // 更新解析结果
     await prisma.projectDocument.update({
       where: { id: document.id },
       data: {
@@ -314,6 +306,20 @@ router.post('/:projectId/parse', authMiddleware, async (req: Request, res: Respo
 })
 
 /**
+ * 映射复杂度
+ */
+function mapComplexity(complexity: string): 'simple' | 'medium' | 'complex' {
+  const mapping: Record<string, 'simple' | 'medium' | 'complex'> = {
+    very_basic: 'simple',
+    basic: 'simple',
+    medium: 'medium',
+    complex: 'complex',
+    very_complex: 'complex'
+  }
+  return mapping[complexity?.toLowerCase()] || 'medium'
+}
+
+/**
  * GET /config/default - 获取默认参数配置
  */
 router.get('/config/default', authMiddleware, async (req: Request, res: Response) => {
@@ -321,11 +327,11 @@ router.get('/config/default', authMiddleware, async (req: Request, res: Response
     const defaultConfig: EstimateConfigResponse = {
       id: 0,
       projectId: 0,
-      complexityConfig: DEFAULT_COMPLEXITY_CONFIG,
-      systemCoefficient: DEFAULT_SYSTEM_COEFFICIENT,
-      processCoefficient: DEFAULT_PROCESS_COEFFICIENT,
-      techStackCoefficient: DEFAULT_TECH_STACK_COEFFICIENT,
-      unitPriceConfig: DEFAULT_UNIT_PRICE_CONFIG,
+      complexityConfig: DEFAULT_COMPLEXITY_CONFIG as any,
+      systemCoefficient: { distributed: 1.2, microservice: 1.3, monomer: 1.0 },
+      processCoefficient: { agile: 1.1, waterfall: 1.0, hybrid: 1.05 },
+      techStackCoefficient: { java: 1.0, python: 0.9, nodejs: 0.95, dotnet: 1.0, go: 0.85 },
+      unitPriceConfig: DEFAULT_DAILY_RATES as any,
       managementCoefficient: DEFAULT_MANAGEMENT_COEFFICIENT
     }
 
@@ -357,10 +363,10 @@ router.post('/:projectId/config', authMiddleware, async (req: Request, res: Resp
 
     const configToSave = {
       complexityConfig: JSON.stringify(configData.complexityConfig || DEFAULT_COMPLEXITY_CONFIG),
-      systemCoefficient: JSON.stringify(configData.systemCoefficient || DEFAULT_SYSTEM_COEFFICIENT),
-      processCoefficient: JSON.stringify(configData.processCoefficient || DEFAULT_PROCESS_COEFFICIENT),
-      techStackCoefficient: JSON.stringify(configData.techStackCoefficient || DEFAULT_TECH_STACK_COEFFICIENT),
-      unitPriceConfig: JSON.stringify(configData.unitPriceConfig || DEFAULT_UNIT_PRICE_CONFIG),
+      systemCoefficient: JSON.stringify(configData.systemCoefficient || {}),
+      processCoefficient: JSON.stringify(configData.processCoefficient || {}),
+      techStackCoefficient: JSON.stringify(configData.techStackCoefficient || {}),
+      unitPriceConfig: JSON.stringify(configData.unitPriceConfig || DEFAULT_DAILY_RATES),
       managementCoefficient: configData.managementCoefficient || DEFAULT_MANAGEMENT_COEFFICIENT
     }
 
@@ -410,7 +416,7 @@ router.post('/:projectId/config', authMiddleware, async (req: Request, res: Resp
 })
 
 /**
- * POST /:projectId/calculate - 计算工作量
+ * POST /:projectId/calculate - 计算工作量（参考 Python 实现）
  */
 router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -438,138 +444,151 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
       where: { projectId: Number(projectId) }
     })
 
-    const complexityConfig: ComplexityConfig = config
+    const complexityConfig: Record<string, number> = config
       ? JSON.parse(config.complexityConfig || '{}')
       : DEFAULT_COMPLEXITY_CONFIG
 
-    const systemCoefficient: SystemCoefficient = config
-      ? JSON.parse(config.systemCoefficient || '{}')
-      : DEFAULT_SYSTEM_COEFFICIENT
-
-    const processCoefficient: ProcessCoefficient = config
-      ? JSON.parse(config.processCoefficient || '{}')
-      : DEFAULT_PROCESS_COEFFICIENT
-
-    const techStackCoefficient: TechStackCoefficient = config
-      ? JSON.parse(config.techStackCoefficient || '{}')
-      : DEFAULT_TECH_STACK_COEFFICIENT
-
-    const unitPriceConfig: UnitPriceConfig = config
-      ? JSON.parse(config.unitPriceConfig || '{}')
-      : DEFAULT_UNIT_PRICE_CONFIG
-
+    const flowCoefficients: Record<string, number> = DEFAULT_FLOW_COEFFICIENTS
+    const techStackCoefficient = DEFAULT_TECH_STACK_COEFFICIENT
     const managementCoefficient = config?.managementCoefficient || DEFAULT_MANAGEMENT_COEFFICIENT
+    const goLivePercentage = DEFAULT_GO_LIVE_PERCENTAGE
+    const dailyRates = config
+      ? JSON.parse(config.unitPriceConfig || '{}')
+      : DEFAULT_DAILY_RATES
 
-    // 计算逻辑
+    // 工作量计算（参考 Python 实现）
     const calcTrace: CalcTraceItem[] = []
-    let totalBaseManDays = 0
+    const items: any[] = []
+    const phaseRawSums: Record<string, number> = {}
 
-    // 步骤1: 基础工作量计算
-    const moduleManDays: { name: string; complexity: string; manDays: number }[] = []
+    // 初始化阶段累加器
+    for (const phase of PHASES) {
+      phaseRawSums[phase.name] = 0
+    }
+
+    // 逐模块逐功能计算
     for (const module of parseResult.modules) {
-      const complexity = module.complexity || 'medium'
-      const baseManDays = complexityConfig[complexity as keyof ComplexityConfig] || 5
-      totalBaseManDays += baseManDays
-      moduleManDays.push({
-        name: module.name,
-        complexity,
-        manDays: baseManDays
+      const features = module.features || [module.name]
+
+      for (const featureName of features) {
+        const complexity = (module.complexity || 'medium').toLowerCase()
+        const baseDays = complexityConfig[complexity] || complexityConfig['medium'] || 1.5
+
+        // 获取关联度系数
+        const associationSystems = (module as any).associationSystems || 1
+        const associationCoef = getAssociationCoefficient(associationSystems)
+
+        for (const phase of PHASES) {
+          const flowCoef = flowCoefficients[phase.key] || 0
+          if (flowCoef === 0) continue
+
+          let rawDays: number
+          if (phase.usesTechStack) {
+            rawDays = baseDays * associationCoef * flowCoef * techStackCoefficient
+          } else {
+            rawDays = baseDays * associationCoef * flowCoef
+          }
+
+          const daysWithMgmt = rawDays * (1 + managementCoefficient)
+          const roundedDays = Math.round(daysWithMgmt * 100) / 100
+
+          if (roundedDays > 0) {
+            items.push({
+              phase: phase.name,
+              module: module.name,
+              function: featureName,
+              workload: roundedDays,
+              complexity
+            })
+            phaseRawSums[phase.name] += daysWithMgmt
+          }
+        }
+      }
+    }
+
+    // 阶段合计
+    const stageDetail: StageDetail[] = []
+    for (const phase of PHASES) {
+      const totalDays = Math.round(phaseRawSums[phase.name] * 2) / 2 // 取整到0.5
+      stageDetail.push({
+        stage: phase.name,
+        manDays: totalDays,
+        percentage: 0, // 后面计算
+        description: `${phase.name}阶段工作量`
       })
     }
 
+    // 投产上线
+    const preGoLiveTotal = stageDetail.reduce((sum, s) => sum + s.manDays, 0)
+    const goLiveDays = Math.round(preGoLiveTotal * goLivePercentage * 100) / 100
+    stageDetail.push({
+      stage: '投产上线',
+      manDays: goLiveDays,
+      percentage: 2,
+      description: '上线部署及技术支持'
+    })
+
+    // 计算占比
+    const totalManDay = stageDetail.reduce((sum, s) => sum + s.manDays, 0)
+    stageDetail.forEach(s => {
+      s.percentage = Math.round(s.manDays / totalManDay * 10000) / 100
+    })
+
+    // 团队成本计算（参考 Python 实现）
+    const reqDays = stageDetail.find(s => s.stage === '需求')?.manDays || 0
+    const uiDays = stageDetail.find(s => s.stage === 'UI设计')?.manDays || 0
+    const techDesignDays = stageDetail.find(s => s.stage === '技术设计')?.manDays || 0
+    const devDays = stageDetail.find(s => s.stage === '开发')?.manDays || 0
+    const techTestDays = stageDetail.find(s => s.stage === '技术测试')?.manDays || 0
+    const perfTestDays = stageDetail.find(s => s.stage === '性能测试')?.manDays || 0
+
+    const productCost = Math.round(reqDays * (dailyRates.product_manager || 2000) * 100) / 100
+    const uiCost = Math.round(uiDays * (dailyRates.ui_designer || 1800) * 100) / 100
+
+    const designDevTotal = techDesignDays + devDays
+    const frontendDays = Math.round(designDevTotal * 0.4 * 100) / 100
+    const backendDays = Math.round(designDevTotal * 0.6 * 100) / 100
+    const devCost = Math.round(
+      frontendDays * (dailyRates.frontend_dev || 1800) +
+      backendDays * (dailyRates.backend_dev || 2000)
+    * 100) / 100
+
+    const testCost = Math.round(
+      techTestDays * (dailyRates.func_tester || 1500) +
+      perfTestDays * (dailyRates.perf_tester || 2000)
+    * 100) / 100
+
+    const pmDays = Math.round((preGoLiveTotal * managementCoefficient + goLiveDays) * 100) / 100
+    const pmCost = Math.round(pmDays * (dailyRates.project_manager || 2000) * 100) / 100
+
+    const teamDetail: TeamDetail[] = [
+      { level: '产品团队', count: 1, dailyCost: dailyRates.product_manager || 2000, totalCost: productCost, manDays: Math.round(reqDays) },
+      { level: 'UI团队', count: 1, dailyCost: dailyRates.ui_designer || 1800, totalCost: uiCost, manDays: Math.round(uiDays) },
+      { level: '研发团队', count: Math.round(frontendDays + backendDays), dailyCost: 0, totalCost: devCost, manDays: Math.round(designDevTotal) },
+      { level: '测试团队', count: 1, dailyCost: 0, totalCost: testCost, manDays: Math.round(techTestDays + perfTestDays) },
+      { level: '项目管理', count: 1, dailyCost: dailyRates.project_manager || 2000, totalCost: pmCost, manDays: Math.round(pmDays) }
+    ]
+
+    const totalCost = Math.round((productCost + uiCost + devCost + testCost + pmCost) * 100) / 100
+    const manMonth = Math.round(totalManDay / 21.75 * 100) / 100
+
+    // 添加计算轨迹
     calcTrace.push({
       step: '基础工作量计算',
       input: { modules: parseResult.modules.map(m => m.name), complexityConfig },
-      output: { moduleManDays, totalBaseManDays },
+      output: { items: items.length },
       formula: 'Σ(模块复杂度对应人天)'
     })
 
-    // 步骤2: 应用系数
-    const systemType = 'distributed' // 默认分布式系统
-    const processType = 'agile' // 默认敏捷开发
-    const techStack = 'java' // 默认Java技术栈
-
-    const systemCoef = systemCoefficient[systemType as keyof SystemCoefficient] || 1.0
-    const processCoef = processCoefficient[processType as keyof ProcessCoefficient] || 1.0
-    const techCoef = techStackCoefficient[techStack as keyof TechStackCoefficient] || 1.0
-
-    const adjustedManDays = totalBaseManDays * systemCoef * processCoef * techCoef
-
-    calcTrace.push({
-      step: '系数调整',
-      input: {
-        totalBaseManDays,
-        systemCoefficient: systemCoef,
-        processCoefficient: processCoef,
-        techStackCoefficient: techCoef
-      },
-      output: { adjustedManDays },
-      formula: '基础人天 × 系统系数 × 流程系数 × 技术栈系数'
-    })
-
-    // 步骤3: 管理成本
-    const totalManDay = adjustedManDays * (1 + managementCoefficient)
-
-    calcTrace.push({
-      step: '管理成本叠加',
-      input: { adjustedManDays, managementCoefficient },
-      output: { totalManDay },
-      formula: '调整后人天 × (1 + 管理系数)'
-    })
-
-    // 步骤4: 阶段分解
-    const stageRatios = {
-      '需求分析': 0.15,
-      '系统设计': 0.20,
-      '编码开发': 0.35,
-      '测试验证': 0.15,
-      '部署上线': 0.10,
-      '运维支持': 0.05
-    }
-
-    const stageDetail: StageDetail[] = Object.entries(stageRatios).map(([stage, ratio]) => ({
-      stage,
-      manDays: Math.round(totalManDay * ratio),
-      percentage: ratio * 100,
-      description: `${stage}阶段工作量`
-    }))
-
     calcTrace.push({
       step: '阶段分解',
-      input: { totalManDay, stageRatios },
+      input: { totalManDay, phases: PHASES.map(p => p.name) },
       output: { stageDetail }
     })
 
-    // 步骤5: 团队配置与成本计算
-    const manMonth = totalManDay / 22 // 每月22工作日
-    const avgUnitPrice = (unitPriceConfig.P5 + unitPriceConfig.P6 + unitPriceConfig.P7 + unitPriceConfig.P8) / 4
-
-    // 假设团队配置: 1 P8 + 2 P7 + 3 P6 + 2 P5
-    const teamConfig = [
-      { level: 'P8', count: 1 },
-      { level: 'P7', count: 2 },
-      { level: 'P6', count: 3 },
-      { level: 'P5', count: 2 }
-    ]
-
-    const teamDetail: TeamDetail[] = teamConfig.map(team => {
-      const dailyCost = unitPriceConfig[team.level as keyof UnitPriceConfig]
-      const memberManDays = totalManDay * (team.count / teamConfig.reduce((sum, t) => sum + t.count, 0))
-      const totalCost = memberManDays * dailyCost
-      return {
-        level: team.level,
-        count: team.count,
-        dailyCost,
-        totalCost,
-        manDays: Math.round(memberManDays)
-      }
-    })
-
-    const totalCost = teamDetail.reduce((sum, team) => sum + team.totalCost, 0)
-
     calcTrace.push({
       step: '团队成本计算',
-      input: { teamConfig, unitPriceConfig, totalManDay },
+      input: { teamConfig: teamDetail.map(t => t.level), dailyRates, totalManDay },
       output: { teamDetail, totalCost }
     })
 
@@ -579,7 +598,7 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
     })
 
     const resultData = {
-      totalManDay: Math.round(totalManDay),
+      totalManDay,
       totalCost,
       moduleCount: parseResult.totalModules,
       manMonth,
@@ -603,7 +622,7 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
     }
 
     const response: CalculateEstimateResponse = {
-      totalManDay: Math.round(totalManDay),
+      totalManDay,
       totalCost,
       moduleCount: parseResult.totalModules,
       manMonth,
@@ -611,6 +630,8 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
       teamDetail,
       calcTrace
     }
+
+    console.log(`[Calculate] 计算完成: 总人天=${totalManDay}, 总成本=${totalCost}万元`)
 
     sendResponse(res, response, '工作量计算成功')
   } catch (error) {
@@ -696,7 +717,7 @@ router.get('/:projectId/export', authMiddleware, async (req: Request, res: Respo
     const fileName = `estimate_${project.projectName}_${Date.now()}.xlsx`
     const filePath = path.join(exportDir, fileName)
 
-    // 创建 Excel 文件（这里使用简化的方式，实际应使用 xlsx 库）
+    // 创建 Excel 文件
     const xlsx = await import('xlsx')
     const wb = xlsx.utils.book_new()
 
@@ -706,7 +727,7 @@ router.get('/:projectId/export', authMiddleware, async (req: Request, res: Respo
       ['总工作量（人天）', result.totalManDay],
       ['总工作量（人月）', result.manMonth],
       ['模块数量', result.moduleCount],
-      ['总成本（万元）', result.totalCost],
+      ['总成本（元）', result.totalCost],
       ['计算时间', result.createdAt.toLocaleString()]
     ]
     const summaryWs = xlsx.utils.aoa_to_sheet(summaryData)
@@ -721,9 +742,9 @@ router.get('/:projectId/export', authMiddleware, async (req: Request, res: Respo
     xlsx.utils.book_append_sheet(wb, stageWs, '阶段明细')
 
     // 团队明细页
-    const teamData = [['职级', '人数', '日成本（万元）', '总成本（万元）', '工作量（人天）']]
+    const teamData = [['团队', '工作量（人天）', '总成本（元）']]
     teamDetail.forEach(team => {
-      teamData.push([team.level, String(team.count), String(team.dailyCost), String(team.totalCost), String(team.manDays)])
+      teamData.push([team.level, String(team.manDays), String(team.totalCost)])
     })
     const teamWs = xlsx.utils.aoa_to_sheet(teamData)
     xlsx.utils.book_append_sheet(wb, teamWs, '团队明细')

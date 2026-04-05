@@ -125,7 +125,7 @@ export const projectApi = {
 export const estimateApi = {
   uploadDocument: (file: File) => {
     const formData = new FormData()
-    formData.append('file', file)
+    formData.append('document', file)
     return api.post<ApiResponse<any>>('/estimate/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })

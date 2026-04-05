@@ -136,7 +136,7 @@ export default function CostEstimateUpload() {
 
   // 拖拽上传配置
   const draggerProps: UploadProps = {
-    name: 'file',
+    name: 'document',
     multiple: false,
     fileList,
     beforeUpload,

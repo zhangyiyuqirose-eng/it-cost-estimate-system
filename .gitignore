@@ -43,3 +43,9 @@ temp/
 # Large archives
 *.zip
 SourceCode.zip
+
+# Uploads
+uploads/
+
+# Reference projects
+workload_assessment/

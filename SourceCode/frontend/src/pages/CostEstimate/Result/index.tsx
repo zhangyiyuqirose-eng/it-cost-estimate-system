@@ -26,7 +26,7 @@ import {
   ExclamationCircleOutlined,
   ArrowLeftOutlined,
   RocketOutlined,
-  TrendingUpOutlined,
+  RiseOutlined,
   TeamOutlined,
   DashboardOutlined,
   ThunderboltOutlined,
@@ -594,7 +594,7 @@ export default function CostEstimateResult() {
             value={result.totalCost}
             suffix="万元"
             precision={2}
-            icon={<TrendingUpOutlined />}
+            icon={<RiseOutlined />}
             color="#EF4444"
             gradient="linear-gradient(135deg, #EF4444 0%, #F87171 100%)"
           />

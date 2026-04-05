@@ -6,7 +6,6 @@ import {
   Upload,
   Button,
   Progress,
-  Space,
   Typography,
   message,
 } from 'antd'

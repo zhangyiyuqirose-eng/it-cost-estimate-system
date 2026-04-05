@@ -71,32 +71,6 @@ interface MemberFormData {
   leaveTime: string | null
 }
 
-// 信息项组件
-interface InfoItemProps {
-  label: string
-  value: React.ReactNode
-  icon?: React.ReactNode
-}
-
-function InfoItem({ label, value, icon }: InfoItemProps) {
-  return (
-    <div
-      style={{
-        padding: 16,
-        borderRadius: 12,
-        background: '#f8fafc',
-        border: '1px solid #f1f5f9',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        {icon && <span style={{ color: '#64748b' }}>{icon}</span>}
-        <Text type="secondary" style={{ fontSize: 13 }}>{label}</Text>
-      </div>
-      <Text strong style={{ fontSize: 16, color: '#0f172a' }}>{value}</Text>
-    </div>
-  )
-}
-
 export default function CostConsumptionInput() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()

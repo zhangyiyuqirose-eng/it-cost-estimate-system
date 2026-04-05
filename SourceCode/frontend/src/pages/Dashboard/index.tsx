@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Row, Col, Statistic, Button, Spin, Empty, Typography, Space, Progress, Tag } from 'antd'
+import { Card, Row, Col, Button, Spin, Empty, Typography } from 'antd'
 import {
   ProjectOutlined,
   ClockCircleOutlined,
@@ -207,7 +207,7 @@ function FeatureCard({ title, description, icon, color, gradient, path, features
 // 告警卡片组件
 interface AlertCardProps {
   title: string
-  value: number
+  value: number | string
   description: string
   type: 'error' | 'warning' | 'info'
   icon: React.ReactNode

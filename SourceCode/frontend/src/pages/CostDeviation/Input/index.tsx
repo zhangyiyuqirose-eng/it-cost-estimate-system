@@ -6,7 +6,6 @@ import {
   Upload,
   Button,
   Progress,
-  Space,
   Typography,
   message,
   Row,
@@ -36,7 +35,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { deviationApi } from '@/api'
 import type { ProjectMemberInfo, BaselineMode } from '@/types'
 
-const { Text, Paragraph } = Typography
+const { Text, Title } = Typography
 const { Dragger } = Upload
 
 // 步骤条配置

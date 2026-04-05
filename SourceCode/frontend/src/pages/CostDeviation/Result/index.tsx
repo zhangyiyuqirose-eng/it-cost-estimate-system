@@ -12,7 +12,6 @@ import {
   Table,
   Tag,
   Progress,
-  Tooltip,
 } from 'antd'
 import {
   EditOutlined,

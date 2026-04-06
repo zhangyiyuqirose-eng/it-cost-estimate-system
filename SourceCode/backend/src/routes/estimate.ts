@@ -1510,6 +1510,7 @@ const DEFAULT_ASSOCIATION_COEFFICIENT = 1.0
 
 /**
  * GET /:projectId/export - 导出Excel报告
+ * 导出成功后将项目标记为已确认，并更新项目信息
  */
 router.get('/:projectId/export', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -1553,6 +1554,19 @@ router.get('/:projectId/export', authMiddleware, async (req: Request, res: Respo
       return sendError(res, 404, '未找到文档解析结果')
     }
 
+    // 解析文档结果获取项目名称
+    let projectName = project.projectName
+    let systemName = ''
+    try {
+      const parseResult: ParseResult = JSON.parse(document.parseResult)
+      if (parseResult.projectName) {
+        projectName = parseResult.projectName
+      }
+      systemName = parseResult.systemName || ''
+    } catch (e) {
+      // ignore
+    }
+
     const stageDetail: StageDetail[] = JSON.parse(result.stageDetail || '[]')
     const teamDetail: TeamDetail[] = JSON.parse(result.teamDetail || '[]')
     const calcTrace: CalcTraceItem[] = JSON.parse(result.calcTrace || '[]')
@@ -1579,9 +1593,34 @@ router.get('/:projectId/export', authMiddleware, async (req: Request, res: Respo
       } : null
     )
 
+    // 更新项目信息（项目名称、合同金额等）
+    await prisma.project.update({
+      where: { id: Number(projectId) },
+      data: {
+        projectName: projectName,
+        contractAmount: result.totalCost,
+        updatedAt: new Date()
+      }
+    })
+
+    // 记录操作日志
+    await prisma.operationLog.create({
+      data: {
+        userId,
+        operationType: 'export_estimate',
+        operationContent: JSON.stringify({
+          projectId,
+          projectName,
+          totalManDay: result.totalManDay,
+          totalCost: result.totalCost
+        }),
+        ipAddress: req.ip || null
+      }
+    })
+
     // 生成文件名
     const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '_').substring(0, 15)
-    const fileName = `工作量评估表_${project.projectName}_${timestamp}.xlsx`
+    const fileName = `工作量评估表_${projectName}_${timestamp}.xlsx`
 
     // 设置响应头
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -1590,11 +1629,13 @@ router.get('/:projectId/export', authMiddleware, async (req: Request, res: Respo
     res.setHeader('X-Total-Months', String(result.manMonth))
     res.setHeader('X-Total-Cost', String(result.totalCost))
     res.setHeader('X-Module-Count', String(result.moduleCount))
+    res.setHeader('X-Project-Name', encodeURIComponent(projectName))
+    res.setHeader('X-Project-Confirmed', 'true')
 
     // 发送文件
     res.send(excelBuffer)
 
-    console.log(`[Export] 导出成功: ${fileName}, 总人天=${result.totalManDay}, 总成本=${result.totalCost}`)
+    console.log(`[Export] 导出成功并确认项目: ${fileName}, 项目=${projectName}, 总人天=${result.totalManDay}, 总成本=${result.totalCost}`)
   } catch (error) {
     console.error('Export error:', error)
     sendError(res, 500, '导出报告失败: ' + (error instanceof Error ? error.message : '未知错误'))

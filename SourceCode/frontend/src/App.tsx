@@ -10,6 +10,7 @@ import CostConsumptionResult from './pages/CostConsumption/Result'
 import CostDeviationInput from './pages/CostDeviation/Input'
 import CostDeviationResult from './pages/CostDeviation/Result'
 import ProjectList from './pages/Project/List'
+import ProjectDetail from './pages/Project/Detail'
 import UserSetting from './pages/User/Setting'
 import Exception from './pages/Exception'
 
@@ -45,6 +46,7 @@ function App() {
         {/* 我的项目 */}
         <Route path="project">
           <Route path="list" element={<ProjectList />} />
+          <Route path="detail/:projectId" element={<ProjectDetail />} />
         </Route>
 
         {/* 个人设置 */}

@@ -27,6 +27,8 @@ import {
   ClusterOutlined,
   RocketOutlined,
   CodeOutlined,
+  SyncOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { estimateApi } from '@/api'
@@ -94,6 +96,7 @@ export default function CostEstimateParseResult() {
   const [parsing, setParsing] = useState(false)
   const [calculating, setCalculating] = useState(false)
   const [parseResult, setParseResult] = useState<ParseResultData | null>(null)
+  const [parseProgress, setParseProgress] = useState(0) // 解析进度 0-100
 
   // 加载解析结果
   useEffect(() => {
@@ -157,47 +160,66 @@ export default function CostEstimateParseResult() {
     if (!projectId) return
 
     setParsing(true)
+    setParseProgress(0)
+
+    // 模拟进度更新（解析过程中逐步增加）
+    const progressInterval = setInterval(() => {
+      setParseProgress(prev => {
+        if (prev >= 90) return prev // 在90%时等待实际完成
+        return prev + Math.random() * 15 // 每次增加随机进度
+      })
+    }, 500)
+
     try {
       const response = await estimateApi.parseDocument(Number(projectId))
       if (response.data.code === 0 || response.data.code === 200) {
+        // 解析完成，设置进度为100%
+        clearInterval(progressInterval)
+        setParseProgress(100)
         message.success('文档解析成功')
-        // 重新加载数据
-        const parseData = response.data.data?.parseResult
-        if (parseData) {
-          const modules: ModuleData[] = (parseData.modules || []).map((m: any) => ({
-            name: m.name,
-            description: m.description || '',
-            functions: (m.functions || m.features || []).map((f: any) => {
-              const funcName = typeof f === 'string' ? f : f.name
-              const complexity = typeof f === 'object' ? f.complexity : 'medium'
-              const associationSystems = typeof f === 'object' ? f.association_systems || 1 : 1
-              return {
-                name: funcName,
-                complexity: complexity || 'medium',
-                complexityScore: getComplexityScore(complexity || 'medium'),
-                associationSystems: associationSystems,
-                associationScore: getAssociationScore(associationSystems),
-                processComplexity: getProcessComplexity(complexity || 'medium'),
-                techStackDifficulty: getTechStackDifficulty(complexity || 'medium')
-              }
+
+        // 延迟一下让进度条显示完成状态
+        setTimeout(() => {
+          // 重新加载数据
+          const parseData = response.data.data?.parseResult
+          if (parseData) {
+            const modules: ModuleData[] = (parseData.modules || []).map((m: any) => ({
+              name: m.name,
+              description: m.description || '',
+              functions: (m.functions || m.features || []).map((f: any) => {
+                const funcName = typeof f === 'string' ? f : f.name
+                const complexity = typeof f === 'object' ? f.complexity : 'medium'
+                const associationSystems = typeof f === 'object' ? f.association_systems || 1 : 1
+                return {
+                  name: funcName,
+                  complexity: complexity || 'medium',
+                  complexityScore: getComplexityScore(complexity || 'medium'),
+                  associationSystems: associationSystems,
+                  associationScore: getAssociationScore(associationSystems),
+                  processComplexity: getProcessComplexity(complexity || 'medium'),
+                  techStackDifficulty: getTechStackDifficulty(complexity || 'medium')
+                }
+              })
+            }))
+
+            const totalFunctions = modules.reduce((sum, m) => sum + m.functions.length, 0)
+
+            setParseResult({
+              projectName: parseData.projectName || '项目名称',
+              systemName: parseData.systemName || '系统名称',
+              modules,
+              totalModules: modules.length,
+              totalFunctions
             })
-          }))
-
-          const totalFunctions = modules.reduce((sum, m) => sum + m.functions.length, 0)
-
-          setParseResult({
-            projectName: parseData.projectName || '项目名称',
-            systemName: parseData.systemName || '系统名称',
-            modules,
-            totalModules: modules.length,
-            totalFunctions
-          })
-        }
+          }
+          setParsing(false)
+        }, 500)
       }
     } catch (err: any) {
+      clearInterval(progressInterval)
+      setParseProgress(0)
       const errorMsg = err?.response?.data?.message || '文档解析失败'
       message.error(errorMsg)
-    } finally {
       setParsing(false)
     }
   }
@@ -676,6 +698,41 @@ export default function CostEstimateParseResult() {
           <Text type="secondary" style={{ fontSize: 14 }}>展开模块查看各功能点的详细评估结果</Text>
         </div>
 
+        {/* 解析进度条 */}
+        {parsing && (
+          <div style={{ marginBottom: 24, padding: 24, background: '#F0FDF4', borderRadius: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <Text strong style={{ color: '#10B981' }}>
+                <SyncOutlined spin style={{ marginRight: 8 }} />
+                正在解析文档...
+              </Text>
+              <Text style={{ color: '#10B981', fontWeight: 500 }}>{Math.round(parseProgress)}%</Text>
+            </div>
+            <Progress
+              percent={parseProgress}
+              strokeColor={{
+                '0%': '#10B981',
+                '100%': '#059669',
+              }}
+              trailColor="#E5E7EB"
+              style={{ marginBottom: 8 }}
+            />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              AI正在分析需求文档，提取功能模块和功能点...
+            </Text>
+          </div>
+        )}
+
+        {/* 解析完成提示 */}
+        {parseProgress === 100 && parseResult && parseResult.modules.length > 0 && !parsing && (
+          <div style={{ marginBottom: 24, padding: 16, background: '#EFF6FF', borderRadius: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <CheckCircleOutlined style={{ color: '#3B82F6', fontSize: 20 }} />
+              <Text strong style={{ color: '#3B82F6' }}>文档解析完成</Text>
+            </div>
+          </div>
+        )}
+
         {parseResult && parseResult.modules.length > 0 ? (
           <Table
             columns={moduleColumns}
@@ -708,6 +765,7 @@ export default function CostEstimateParseResult() {
                 icon={<CalculatorOutlined />}
                 onClick={handleParse}
                 loading={parsing}
+                disabled={parsing}
                 style={{
                   borderRadius: 14,
                   height: 48,

@@ -146,10 +146,16 @@ export interface ApiResponse<T = any> {
   code: number
   message: string
   data: T
+  meta?: {
+    total: number
+    page: number
+    limit: number
+    totalPages: number
+  }
   timestamp?: number
 }
 
-// 分页响应格式
+// 分页响应格式（用于列表数据）
 export interface PageResponse<T> {
   list: T[]
   total: number
@@ -181,7 +187,7 @@ export const dashboardApi = {
 // 项目相关API
 export const projectApi = {
   getList: (params?: { status?: string; keyword?: string; page?: number; pageSize?: number }) =>
-    api.get<ApiResponse<PageResponse<any>>>('/projects', { params }),
+    api.get<ApiResponse<any[]>>('/projects', { params }),
 
   getDetail: (projectId: number) =>
     api.get<ApiResponse<any>>(`/projects/${projectId}`),

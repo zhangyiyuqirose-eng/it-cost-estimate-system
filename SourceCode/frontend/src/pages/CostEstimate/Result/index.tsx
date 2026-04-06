@@ -270,12 +270,25 @@ export default function CostEstimateResult() {
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `成本预估报告_${projectId}_${new Date().toISOString().slice(0, 10)}.xlsx`
+
+      // 从响应头获取项目名称
+      const projectName = response.headers['x-project-name']
+        ? decodeURIComponent(response.headers['x-project-name'])
+        : projectId
+      link.download = `成本预估报告_${projectName}_${new Date().toISOString().slice(0, 10)}.xlsx`
+
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
-      message.success('报告导出成功')
+
+      // 检查是否已确认
+      const isConfirmed = response.headers['x-project-confirmed'] === 'true'
+      if (isConfirmed) {
+        message.success('报告导出成功，项目已确认保存到"我的项目"')
+      } else {
+        message.success('报告导出成功')
+      }
     } catch {
       message.error('报告导出失败')
     } finally {
@@ -441,7 +454,7 @@ export default function CostEstimateResult() {
       ),
     },
     {
-      title: '成本(万元)',
+      title: '成本(元)',
       dataIndex: 'cost',
       key: 'cost',
       width: 120,
@@ -719,7 +732,7 @@ export default function CostEstimateResult() {
           <StatCard
             title="总成本"
             value={result.totalCost}
-            suffix="万元"
+            suffix="元"
             precision={2}
             icon={<RiseOutlined />}
             color="#EF4444"

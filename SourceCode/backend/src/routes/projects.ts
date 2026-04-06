@@ -51,8 +51,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       })
     }
 
-    const page = parseInt(String(req.query.page) || '1', 10)
-    const limit = parseInt(String(req.query.limit) || '10', 10)
+    // 安全解析分页参数
+    const page = Math.max(1, parseInt(String(req.query.page), 10) || 1)
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit || req.query.pageSize), 10) || 10))
     const skip = (page - 1) * limit
 
     const where: any = { userId }
@@ -69,8 +70,10 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       where.projectName = { contains: String(req.query.keyword) }
     }
 
-    const sortBy = String(req.query.sortBy) || 'createdAt'
-    const sortOrder = String(req.query.sortOrder) || 'desc'
+    // 安全解析排序参数
+    const validSortFields = ['id', 'userId', 'projectName', 'projectType', 'contractAmount', 'status', 'createdAt', 'updatedAt']
+    const sortBy = validSortFields.includes(String(req.query.sortBy)) ? String(req.query.sortBy) : 'createdAt'
+    const sortOrder = String(req.query.sortOrder).toLowerCase() === 'asc' ? 'asc' : 'desc'
 
     const total = await prisma.project.count({ where })
 

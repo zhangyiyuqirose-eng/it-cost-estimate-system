@@ -14,6 +14,10 @@ import {
   Spin,
   Empty,
   message,
+  Descriptions,
+  Typography,
+  Row,
+  Col,
 } from 'antd'
 import {
   SearchOutlined,
@@ -22,11 +26,18 @@ import {
   EditOutlined,
   DeleteOutlined,
   ProjectOutlined,
+  RightOutlined,
+  DownOutlined,
+  DollarOutlined,
+  TeamOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons'
 import { projectApi } from '@/api'
 import type { Project, ProjectStatus } from '@/types'
 import type { ColumnsType } from 'antd/es/table'
 import PageHeader from '@/components/common/PageHeader'
+
+const { Text } = Typography
 
 // 项目状态配置
 const STATUS_CONFIG: Record<ProjectStatus, { label: string; color: string }> = {
@@ -44,17 +55,30 @@ const PROJECT_TYPES: Record<string, string> = {
   development: '开发项目',
 }
 
-interface ProjectListResponse {
-  list: Project[]
-  total: number
-  page: number
-  pageSize: number
+// 扩展项目类型（包含后端返回的额外字段）
+interface ProjectListItem extends Project {
+  documentCount?: number
+  memberCount?: number
+  members?: Array<{
+    id: number
+    name: string
+    level: string
+    role: string | null
+  }>
+  estimateResults?: Array<{
+    totalManDay: number
+    totalCost: number
+  }>
+  costs?: Array<{
+    availableCost: number
+    availableDays: number
+  }>
 }
 
 export default function ProjectList() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
-  const [projects, setProjects] = useState<Project[]>([])
+  const [projects, setProjects] = useState<ProjectListItem[]>([])
   const [total, setTotal] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -73,7 +97,7 @@ export default function ProjectList() {
 
   // 编辑项目弹窗
   const [editModalVisible, setEditModalVisible] = useState(false)
-  const [editingProject, setEditingProject] = useState<Project | null>(null)
+  const [editingProject, setEditingProject] = useState<ProjectListItem | null>(null)
   const [editProjectName, setEditProjectName] = useState('')
   const [editProjectType, setEditProjectType] = useState('')
   const [editProjectStatus, setEditProjectStatus] = useState<ProjectStatus>('ongoing')
@@ -92,9 +116,16 @@ export default function ProjectList() {
         page: currentPage,
         pageSize: pageSize,
       })
-      const data = response.data.data as ProjectListResponse
-      setProjects(data.list)
-      setTotal(data.total)
+      // 后端返回格式: { code: 0, message: '...', data: [...], meta: { total, page, limit, totalPages } }
+      const result = response.data
+      const projectData = result.data || []
+      // 将后端的 id 字段映射为前端的 projectId
+      const mappedProjects = projectData.map((p: any) => ({
+        ...p,
+        projectId: p.id,
+      }))
+      setProjects(mappedProjects)
+      setTotal(result.meta?.total || 0)
     } catch {
       // Error handled by interceptor
     } finally {
@@ -180,7 +211,7 @@ export default function ProjectList() {
     }
   }
 
-  const openEditModal = (project: Project) => {
+  const openEditModal = (project: ProjectListItem) => {
     setEditingProject(project)
     setEditProjectName(project.projectName)
     setEditProjectType(project.projectType || '')
@@ -188,16 +219,88 @@ export default function ProjectList() {
     setEditModalVisible(true)
   }
 
-  const columns: ColumnsType<Project> = [
+  // 展开行渲染
+  const expandedRowRender = (record: ProjectListItem) => {
+    const latestEstimate = record.estimateResults?.[0]
+    const latestCost = record.costs?.[0]
+    const members = record.members || []
+
+    return (
+      <div style={{ padding: '16px 24px', background: '#fafbfc', borderRadius: 8 }}>
+        <Row gutter={24}>
+          <Col span={8}>
+            <Card size="small" title={<><BarChartOutlined style={{ marginRight: 8 }} />评估结果</>} style={{ marginBottom: 16 }}>
+              {latestEstimate ? (
+                <Descriptions column={1} size="small">
+                  <Descriptions.Item label="总人天">
+                    <Text strong style={{ color: '#3B82F6' }}>{latestEstimate.totalManDay?.toFixed(1)} 天</Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="总成本">
+                    <Text strong style={{ color: '#EF4444' }}>¥ {latestEstimate.totalCost?.toFixed(2)} 元</Text>
+                  </Descriptions.Item>
+                </Descriptions>
+              ) : (
+                <Text type="secondary">暂无评估数据</Text>
+              )}
+            </Card>
+          </Col>
+          <Col span={8}>
+            <Card size="small" title={<><DollarOutlined style={{ marginRight: 8 }} />成本消耗</>} style={{ marginBottom: 16 }}>
+              {latestCost ? (
+                <Descriptions column={1} size="small">
+                  <Descriptions.Item label="可消耗成本">
+                    <Text strong style={{ color: latestCost.availableCost > 0 ? '#10B981' : '#EF4444' }}>
+                      ¥ {latestCost.availableCost?.toFixed(2)} 万元
+                    </Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="可消耗天数">
+                    <Text strong>{latestCost.availableDays} 天</Text>
+                  </Descriptions.Item>
+                </Descriptions>
+              ) : (
+                <Text type="secondary">暂无成本数据</Text>
+              )}
+            </Card>
+          </Col>
+          <Col span={8}>
+            <Card size="small" title={<><TeamOutlined style={{ marginRight: 8 }} />团队成员 ({members.length}人)</>} style={{ marginBottom: 16 }}>
+              {members.length > 0 ? (
+                <Space wrap>
+                  {members.slice(0, 5).map((member) => (
+                    <Tag key={member.id} color="blue">
+                      {member.name} ({member.level})
+                    </Tag>
+                  ))}
+                  {members.length > 5 && <Tag>+{members.length - 5}</Tag>}
+                </Space>
+              ) : (
+                <Text type="secondary">暂无团队成员</Text>
+              )}
+            </Card>
+          </Col>
+        </Row>
+        <div style={{ textAlign: 'right', marginTop: 8 }}>
+          <Button
+            type="link"
+            onClick={() => navigate(`/project/detail/${record.projectId}`)}
+          >
+            查看完整详情 →
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const columns: ColumnsType<ProjectListItem> = [
     {
       title: '项目名称',
       dataIndex: 'projectName',
       key: 'projectName',
       ellipsis: true,
-      render: (text: string, record: Project) => (
+      render: (text: string, record: ProjectListItem) => (
         <a
           onClick={() => navigate(`/project/detail/${record.projectId}`)}
-          style={{ color: '#1890ff' }}
+          style={{ color: '#1890ff', fontWeight: 500 }}
         >
           {text}
         </a>
@@ -222,6 +325,22 @@ export default function ProjectList() {
       ),
     },
     {
+      title: '文档',
+      dataIndex: 'documentCount',
+      key: 'documentCount',
+      width: 80,
+      align: 'center',
+      render: (count: number) => count || 0,
+    },
+    {
+      title: '成员',
+      dataIndex: 'memberCount',
+      key: 'memberCount',
+      width: 80,
+      align: 'center',
+      render: (count: number) => count || 0,
+    },
+    {
       title: '创建时间',
       dataIndex: 'createdAt',
       key: 'createdAt',
@@ -233,7 +352,7 @@ export default function ProjectList() {
       key: 'action',
       width: 200,
       fixed: 'right',
-      render: (_, record: Project) => (
+      render: (_, record: ProjectListItem) => (
         <Space size="small">
           <Button
             type="link"
@@ -352,7 +471,17 @@ export default function ProjectList() {
               dataSource={projects}
               rowKey="projectId"
               pagination={false}
-              scroll={{ x: 800 }}
+              scroll={{ x: 1000 }}
+              expandable={{
+                expandedRowRender,
+                expandIcon: ({ expanded, onExpand, record }) =>
+                  expanded ? (
+                    <DownOutlined onClick={e => onExpand(record, e)} style={{ color: '#3B82F6' }} />
+                  ) : (
+                    <RightOutlined onClick={e => onExpand(record, e)} style={{ color: '#94a3b8' }} />
+                  ),
+                expandRowByClick: true,
+              }}
             />
             <div style={{ marginTop: 16, textAlign: 'right' }}>
               <Pagination

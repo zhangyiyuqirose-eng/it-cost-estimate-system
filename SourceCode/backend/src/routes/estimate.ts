@@ -344,6 +344,45 @@ router.get('/config/default', authMiddleware, async (req: Request, res: Response
 })
 
 /**
+ * GET /:projectId/config - 获取项目已保存的配置
+ */
+router.get('/:projectId/config', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest
+    const { projectId } = req.params
+    const userId = authReq.userId
+
+    if (!await verifyProjectOwnership(Number(projectId), userId)) {
+      return sendError(res, 403, '无权访问该项目')
+    }
+
+    const config = await prisma.estimateConfig.findFirst({
+      where: { projectId: Number(projectId) }
+    })
+
+    if (!config) {
+      return sendError(res, 404, '该项目尚未保存配置')
+    }
+
+    const response: EstimateConfigResponse = {
+      id: config.id,
+      projectId: config.projectId,
+      complexityConfig: JSON.parse(config.complexityConfig || '{}'),
+      systemCoefficient: JSON.parse(config.systemCoefficient || '{}'),
+      processCoefficient: JSON.parse(config.processCoefficient || '{}'),
+      techStackCoefficient: JSON.parse(config.techStackCoefficient || '{}'),
+      unitPriceConfig: JSON.parse(config.unitPriceConfig || '{}'),
+      managementCoefficient: config.managementCoefficient
+    }
+
+    sendResponse(res, response, '获取配置成功')
+  } catch (error) {
+    console.error('Get config error:', error)
+    sendError(res, 500, '获取配置失败')
+  }
+})
+
+/**
  * POST /:projectId/config - 保存参数配置
  */
 router.post('/:projectId/config', authMiddleware, async (req: Request, res: Response) => {

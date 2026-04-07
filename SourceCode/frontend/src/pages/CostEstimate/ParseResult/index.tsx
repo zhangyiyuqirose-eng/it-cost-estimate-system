@@ -35,7 +35,7 @@ import { estimateApi } from '@/api'
 
 const { Title, Text } = Typography
 
-// 步骤条配置（4步）
+// 步骤条配置（4步）- 调整顺序：上传->解析->配置->结果
 const stepItems = [
   {
     title: '文件上传',
@@ -43,14 +43,14 @@ const stepItems = [
     icon: <FileTextOutlined />,
   },
   {
+    title: '文档解析',
+    description: '查看功能点详情',
+    icon: <FileSearchOutlined />,
+  },
+  {
     title: '参数配置',
     description: '配置计算参数',
     icon: <SettingOutlined />,
-  },
-  {
-    title: '文档解析结果',
-    description: '查看功能点详情',
-    icon: <FileSearchOutlined />,
   },
   {
     title: '结果展示',
@@ -91,10 +91,9 @@ export default function CostEstimateParseResult() {
   const [searchParams] = useSearchParams()
   const projectId = searchParams.get('projectId')
 
-  const [currentStep] = useState(2)
+  const [currentStep] = useState(1)  // 步骤2：文档解析
   const [loading, setLoading] = useState(true)
   const [parsing, setParsing] = useState(false)
-  const [calculating, setCalculating] = useState(false)
   const [parseResult, setParseResult] = useState<ParseResultData | null>(null)
   const [parseProgress, setParseProgress] = useState(0) // 解析进度 0-100
 
@@ -462,26 +461,6 @@ export default function CostEstimateParseResult() {
     }
   ]
 
-  // 开始计算并跳转
-  const handleCalculate = async () => {
-    if (!projectId) return
-
-    setCalculating(true)
-    try {
-      // 开始计算
-      const response = await estimateApi.calculate(Number(projectId))
-      if (response.data.code === 0 || response.data.code === 200) {
-        message.success('计算完成')
-        navigate(`/cost-estimate/result?projectId=${projectId}`)
-      }
-    } catch (err: any) {
-      const errorMsg = err?.response?.data?.message || '计算失败，请重试'
-      message.error(errorMsg)
-    } finally {
-      setCalculating(false)
-    }
-  }
-
   // 维度说明卡片
   const DimensionCard = ({ title, icon, color, description, range }: {
     title: string
@@ -790,11 +769,11 @@ export default function CostEstimateParseResult() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button
             size="large"
-            onClick={() => navigate(`/cost-estimate/config?projectId=${projectId}`)}
+            onClick={() => navigate('/cost-estimate/upload')}
             style={{ borderRadius: 14, height: 48 }}
           >
             <ArrowLeftOutlined style={{ marginRight: 8 }} />
-            上一步：参数配置
+            上一步：文件上传
           </Button>
           <div style={{ display: 'flex', gap: 16 }}>
             {(!parseResult || parseResult.modules.length === 0) && (
@@ -812,8 +791,7 @@ export default function CostEstimateParseResult() {
               type="primary"
               size="large"
               disabled={!parseResult || parseResult.modules.length === 0}
-              onClick={handleCalculate}
-              loading={calculating}
+              onClick={() => navigate(`/cost-estimate/config?projectId=${projectId}`)}
               style={{
                 borderRadius: 14,
                 height: 48,
@@ -824,8 +802,8 @@ export default function CostEstimateParseResult() {
                 fontWeight: 600,
               }}
             >
-              {calculating ? '正在计算...' : '开始计算'}
-              {!calculating && <ArrowRightOutlined style={{ marginLeft: 10 }} />}
+              下一步：参数配置
+              <ArrowRightOutlined style={{ marginLeft: 10 }} />
             </Button>
           </div>
         </div>

@@ -223,6 +223,9 @@ export const estimateApi = {
   getDefaultConfig: () =>
     api.get<ApiResponse<any>>('/estimate/config/default'),
 
+  getConfig: (projectId: number) =>
+    api.get<ApiResponse<any>>(`/estimate/${projectId}/config`),
+
   saveConfig: (projectId: number, config: any) =>
     api.post<ApiResponse<any>>(`/estimate/${projectId}/config`, config),
 

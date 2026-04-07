@@ -17,6 +17,7 @@ import {
   Tooltip,
   Empty,
   Modal,
+  Statistic,
 } from 'antd'
 import {
   FileTextOutlined,
@@ -32,9 +33,10 @@ import {
   RocketOutlined,
   PlusOutlined,
   DeleteOutlined,
+  EditOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { estimateApi } from '@/api'
+import { estimateApi, projectApi } from '@/api'
 import type {
   EstimateConfig,
   ComplexityLevel,
@@ -46,7 +48,7 @@ import type {
 
 const { Title, Text } = Typography
 
-// 步骤条配置（4步）
+// 步骤条配置（4步）- 调整顺序：上传->解析->配置->结果
 const stepItems = [
   {
     title: '文件上传',
@@ -54,14 +56,14 @@ const stepItems = [
     icon: <FileTextOutlined />,
   },
   {
+    title: '文档解析',
+    description: '查看功能点详情',
+    icon: <FileSearchOutlined />,
+  },
+  {
     title: '参数配置',
     description: '配置计算参数',
     icon: <SettingOutlined />,
-  },
-  {
-    title: '文档解析结果',
-    description: '查看功能点详情',
-    icon: <FileSearchOutlined />,
   },
   {
     title: '结果展示',
@@ -70,96 +72,17 @@ const stepItems = [
   },
 ]
 
-// 默认复杂度基准配置
-const defaultComplexityConfig: ComplexityLevel[] = [
-  { level: '简单', workdays: 1 },
-  { level: '一般', workdays: 3 },
-  { level: '中等', workdays: 5 },
-  { level: '复杂', workdays: 8 },
-  { level: '极复杂', workdays: 15 },
-]
-
-// 默认系统关联度系数配置
-const defaultSystemCoefficientConfig: SystemCoefficient[] = [
-  { systemCount: 1, coefficient: 1.0 },
-  { systemCount: 2, coefficient: 1.2 },
-  { systemCount: 3, coefficient: 1.4 },
-  { systemCount: 4, coefficient: 1.6 },
-  { systemCount: 5, coefficient: 1.8 },
-]
-
-// 默认流程系数配置
-const defaultProcessCoefficientConfig: ProcessCoefficient[] = [
-  { stage: '需求分析', coefficient: 0.15 },
-  { stage: '系统设计', coefficient: 0.20 },
-  { stage: '开发实现', coefficient: 0.35 },
-  { stage: '测试验证', coefficient: 0.15 },
-  { stage: '部署上线', coefficient: 0.10 },
-  { stage: '运维保障', coefficient: 0.05 },
-]
-
-// 默认技术栈难度系数配置
-const defaultTechStackCoefficientConfig: TechStackCoefficient[] = [
-  { techType: '常规技术', coefficient: 1.0 },
-  { techType: '新技术应用', coefficient: 1.2 },
-  { techType: '技术改造', coefficient: 1.3 },
-  { techType: '技术集成', coefficient: 1.4 },
-  { techType: '前沿技术', coefficient: 1.5 },
-]
-
-// 默认人天单价配置
-const defaultUnitPriceConfig: UnitPrice[] = [
-  { role: '项目经理', price: 2500 },
-  { role: '高级开发', price: 1800 },
-  { role: '中级开发', price: 1500 },
-  { role: '初级开发', price: 1200 },
-  { role: '测试工程师', price: 1000 },
-  { role: '运维工程师', price: 1000 },
-]
-
-// 配置卡片标题组件
-interface ConfigCardHeaderProps {
-  title: string
-  subtitle: string
-  icon: React.ReactNode
-  color: string
-  onAdd?: () => void
-}
-
-function ConfigCardHeader({ title, subtitle, icon, color, onAdd }: ConfigCardHeaderProps) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-        <div
-          style={{
-            width: 52,
-            height: 52,
-            borderRadius: 14,
-            background: `${color}12`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <span style={{ fontSize: 26, color }}>{icon}</span>
-        </div>
-        <div>
-          <Title level={5} style={{ margin: 0, fontWeight: 600 }}>{title}</Title>
-          <Text type="secondary" style={{ fontSize: 13, marginTop: 4 }}>{subtitle}</Text>
-        </div>
-      </div>
-      {onAdd && (
-        <Button
-          type="dashed"
-          icon={<PlusOutlined />}
-          onClick={onAdd}
-          style={{ borderRadius: 10 }}
-        >
-          新增
-        </Button>
-      )}
-    </div>
-  )
+// 项目列表项
+interface ProjectListItem {
+  id: number
+  projectName: string
+  projectType: string | null
+  contractAmount: number | null
+  status: string
+  createdAt: string
+  members: Array<{ id: number; name: string; level: string; role: string | null }>
+  estimateResults: Array<{ totalManDay: number; totalCost: number }>
+  estimateConfigs: Array<{ id: number }>
 }
 
 export default function CostEstimateConfig() {
@@ -167,16 +90,21 @@ export default function CostEstimateConfig() {
   const [searchParams] = useSearchParams()
   const projectId = searchParams.get('projectId')
 
-  const [currentStep, setCurrentStep] = useState(1)
+  const [currentStep] = useState(2)  // 步骤3：参数配置
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  // 项目列表状态
+  const [projects, setProjects] = useState<ProjectListItem[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(false)
+  const [totalProjects, setTotalProjects] = useState(0)
+
   // 配置数据
-  const [complexityConfig, setComplexityConfig] = useState<ComplexityLevel[]>(defaultComplexityConfig)
-  const [systemCoefficientConfig, setSystemCoefficientConfig] = useState<SystemCoefficient[]>(defaultSystemCoefficientConfig)
-  const [processCoefficientConfig, setProcessCoefficientConfig] = useState<ProcessCoefficient[]>(defaultProcessCoefficientConfig)
-  const [techStackCoefficientConfig, setTechStackCoefficientConfig] = useState<TechStackCoefficient[]>(defaultTechStackCoefficientConfig)
-  const [unitPriceConfig, setUnitPriceConfig] = useState<UnitPrice[]>(defaultUnitPriceConfig)
+  const [complexityConfig, setComplexityConfig] = useState<ComplexityLevel[]>([])
+  const [systemCoefficientConfig, setSystemCoefficientConfig] = useState<SystemCoefficient[]>([])
+  const [processCoefficientConfig, setProcessCoefficientConfig] = useState<ProcessCoefficient[]>([])
+  const [techStackCoefficientConfig, setTechStackCoefficientConfig] = useState<TechStackCoefficient[]>([])
+  const [unitPriceConfig, setUnitPriceConfig] = useState<UnitPrice[]>([])
   const [managementCoefficient, setManagementCoefficient] = useState<number>(0.15)
 
   // 弹窗状态
@@ -184,34 +112,78 @@ export default function CostEstimateConfig() {
   const [modalType, setModalType] = useState<'complexity' | 'system' | 'process' | 'techStack' | 'unitPrice'>('complexity')
   const [form] = Form.useForm()
 
-  // 加载默认参数
+  // 加载项目列表（当没有projectId时）
   useEffect(() => {
-    const loadDefaultConfig = async () => {
-      setLoading(true)
+    if (!projectId) {
+      loadProjects()
+    }
+  }, [projectId])
+
+  // 加载配置参数（当有projectId时）
+  useEffect(() => {
+    if (projectId) {
+      loadConfig()
+    }
+  }, [projectId])
+
+  // 加载项目列表
+  const loadProjects = async () => {
+    setProjectsLoading(true)
+    try {
+      const response = await projectApi.getList({ pageSize: 100 })
+      if (response.data.code === 0 || response.data.code === 200) {
+        const projectData = response.data.data || []
+        // 过滤出有解析结果的项目（可以配置参数）
+        const projectsWithDocs = projectData.filter((p: any) => p.documentCount > 0)
+        setProjects(projectsWithDocs)
+        setTotalProjects(projectsWithDocs.length)
+      }
+    } catch {
+      message.error('加载项目列表失败')
+    } finally {
+      setProjectsLoading(false)
+    }
+  }
+
+  // 加载配置
+  const loadConfig = async () => {
+    setLoading(true)
+    try {
+      // 先尝试获取已保存的配置
+      const response = await estimateApi.getConfig(Number(projectId))
+      if (response.data.code === 0 || response.data.code === 200) {
+        const config: EstimateConfig = response.data.data
+        if (config) {
+          setComplexityConfig(Array.isArray(config.complexityConfig) ? config.complexityConfig : [])
+          setSystemCoefficientConfig(Array.isArray(config.systemCoefficientConfig) ? config.systemCoefficientConfig : [])
+          setProcessCoefficientConfig(Array.isArray(config.processCoefficientConfig) ? config.processCoefficientConfig : [])
+          setTechStackCoefficientConfig(Array.isArray(config.techStackCoefficientConfig) ? config.techStackCoefficientConfig : [])
+          setUnitPriceConfig(Array.isArray(config.unitPriceConfig) ? config.unitPriceConfig : [])
+          setManagementCoefficient(config.managementCoefficient || 0.15)
+        }
+      }
+    } catch {
+      // 如果没有配置，加载默认配置
       try {
-        const response = await estimateApi.getDefaultConfig()
-        if (response.data.code === 0 || response.data.code === 200) {
-          const config: EstimateConfig = response.data.data
+        const defaultResponse = await estimateApi.getDefaultConfig()
+        if (defaultResponse.data.code === 0 || defaultResponse.data.code === 200) {
+          const config: EstimateConfig = defaultResponse.data.data
           if (config) {
-            // 确保数据是数组格式，否则使用默认配置
-            setComplexityConfig(Array.isArray(config.complexityConfig) ? config.complexityConfig : defaultComplexityConfig)
-            setSystemCoefficientConfig(Array.isArray(config.systemCoefficientConfig) ? config.systemCoefficientConfig : defaultSystemCoefficientConfig)
-            setProcessCoefficientConfig(Array.isArray(config.processCoefficientConfig) ? config.processCoefficientConfig : defaultProcessCoefficientConfig)
-            setTechStackCoefficientConfig(Array.isArray(config.techStackCoefficientConfig) ? config.techStackCoefficientConfig : defaultTechStackCoefficientConfig)
-            setUnitPriceConfig(Array.isArray(config.unitPriceConfig) ? config.unitPriceConfig : defaultUnitPriceConfig)
+            setComplexityConfig(Array.isArray(config.complexityConfig) ? config.complexityConfig : [])
+            setSystemCoefficientConfig(Array.isArray(config.systemCoefficientConfig) ? config.systemCoefficientConfig : [])
+            setProcessCoefficientConfig(Array.isArray(config.processCoefficientConfig) ? config.processCoefficientConfig : [])
+            setTechStackCoefficientConfig(Array.isArray(config.techStackCoefficientConfig) ? config.techStackCoefficientConfig : [])
+            setUnitPriceConfig(Array.isArray(config.unitPriceConfig) ? config.unitPriceConfig : [])
             setManagementCoefficient(config.managementCoefficient || 0.15)
           }
         }
       } catch {
-        // 使用默认配置
-        message.info('使用默认配置参数')
-      } finally {
-        setLoading(false)
+        message.info('使用默认配置')
       }
+    } finally {
+      setLoading(false)
     }
-
-    loadDefaultConfig()
-  }, [])
+  }
 
   // 打开新增弹窗
   const openAddModal = (type: 'complexity' | 'system' | 'process' | 'techStack' | 'unitPrice') => {
@@ -263,10 +235,10 @@ export default function CostEstimateConfig() {
           break
       }
 
-      message.success('添加成功')
       setModalVisible(false)
+      message.success('添加成功')
     } catch {
-      // 表单验证失败
+      // 验证失败
     }
   }
 
@@ -321,7 +293,7 @@ export default function CostEstimateConfig() {
     }
   }
 
-  // 保存配置并跳转到解析结果页
+  // 保存配置并计算跳转到结果页
   const handleNext = async () => {
     if (!projectId) {
       message.warning('缺少项目ID，无法保存配置')
@@ -339,16 +311,114 @@ export default function CostEstimateConfig() {
         managementCoefficient,
       }
 
+      // 保存配置
       await estimateApi.saveConfig(Number(projectId), config)
-      message.success('配置保存成功')
-      setCurrentStep(2)
-      navigate(`/cost-estimate/parse-result?projectId=${projectId}`)
+
+      // 开始计算
+      const calcResponse = await estimateApi.calculate(Number(projectId))
+      if (calcResponse.data.code === 0 || calcResponse.data.code === 200) {
+        message.success('配置保存并计算完成')
+        navigate(`/cost-estimate/result?projectId=${projectId}`)
+      }
     } catch {
-      message.error('配置保存失败')
+      message.error('操作失败，请重试')
     } finally {
       setSaving(false)
     }
   }
+
+  // 项目列表表格列配置
+  const projectColumns: ColumnsType<ProjectListItem> = [
+    {
+      title: '项目名称',
+      dataIndex: 'projectName',
+      key: 'projectName',
+      width: 200,
+      render: (value: string) => (
+        <Text strong style={{ color: '#0f172a' }}>{value}</Text>
+      )
+    },
+    {
+      title: '项目类型',
+      dataIndex: 'projectType',
+      key: 'projectType',
+      width: 100,
+      render: (value: string) => value ? (
+        <Tag style={{ borderRadius: 8, background: '#3B82F615', color: '#3B82F6', border: 'none' }}>
+          {value}
+        </Tag>
+      ) : '-'
+    },
+    {
+      title: '团队成员',
+      key: 'members',
+      width: 100,
+      render: (_: any, record: ProjectListItem) => (
+        <Tag style={{ borderRadius: 8, background: '#8B5CF615', color: '#8B5CF6', border: 'none' }}>
+          {record.members?.length || 0} 人
+        </Tag>
+      )
+    },
+    {
+      title: '预估结果',
+      key: 'estimateResult',
+      width: 150,
+      render: (_: any, record: ProjectListItem) => {
+        const result = record.estimateResults?.[0]
+        if (result) {
+          return (
+            <div>
+              <Text style={{ color: '#10B981', fontWeight: 500 }}>{result.totalManDay.toFixed(1)} 人天</Text>
+              <br />
+              <Text type="secondary" style={{ fontSize: 12 }}>¥{result.totalCost.toFixed(0)}</Text>
+            </div>
+          )
+        }
+        return <Tag style={{ borderRadius: 8, background: '#F59E0B15', color: '#F59E0B', border: 'none' }}>未计算</Tag>
+      }
+    },
+    {
+      title: '配置状态',
+      key: 'configStatus',
+      width: 100,
+      render: (_: any, record: ProjectListItem) => {
+        const hasConfig = record.estimateConfigs && record.estimateConfigs.length > 0
+        return (
+          <Tag style={{
+            borderRadius: 8,
+            background: hasConfig ? '#10B98115' : '#94a3b815',
+            color: hasConfig ? '#10B981' : '#94a3b8',
+            border: 'none'
+          }}>
+            {hasConfig ? '已配置' : '待配置'}
+          </Tag>
+        )
+      }
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 120,
+      render: (value: string) => new Date(value).toLocaleDateString('zh-CN')
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 120,
+      render: (_: any, record: ProjectListItem) => (
+        <Button
+          type="primary"
+          size="small"
+          icon={<EditOutlined />}
+          onClick={() => navigate(`/cost-estimate/config?projectId=${record.id}`)}
+          style={{ borderRadius: 8 }}
+        >
+          配置参数
+        </Button>
+      )
+    }
+  ]
 
   // 复杂度基准表格列配置
   const complexityColumns: ColumnsType<ComplexityLevel> = [
@@ -469,22 +539,7 @@ export default function CostEstimateConfig() {
       dataIndex: 'stage',
       key: 'stage',
       width: 120,
-      render: (value: string) => {
-        const icons: Record<string, React.ReactNode> = {
-          '需求分析': '📋',
-          '系统设计': '🎨',
-          '开发实现': '💻',
-          '测试验证': '🧪',
-          '部署上线': '🚀',
-          '运维保障': '🔧',
-        }
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>{icons[value] || '📌'}</span>
-            <Text>{value}</Text>
-          </div>
-        )
-      },
+      render: (value: string) => <Text>{value}</Text>,
     },
     {
       title: '系数',
@@ -493,9 +548,9 @@ export default function CostEstimateConfig() {
       width: 120,
       render: (value: number, _: ProcessCoefficient, index: number) => (
         <InputNumber
-          min={0.01}
+          min={0}
           max={1}
-          step={0.05}
+          step={0.01}
           precision={2}
           value={value}
           onChange={(val) => {
@@ -529,28 +584,7 @@ export default function CostEstimateConfig() {
       dataIndex: 'techType',
       key: 'techType',
       width: 120,
-      render: (value: string) => {
-        const colors: Record<string, string> = {
-          '常规技术': '#64748b',
-          '新技术应用': '#3B82F6',
-          '技术改造': '#F59E0B',
-          '技术集成': '#8B5CF6',
-          '前沿技术': '#EF4444',
-        }
-        return (
-          <Tag
-            style={{
-              borderRadius: 8,
-              padding: '4px 12px',
-              background: `${colors[value] || '#64748b'}15`,
-              color: colors[value] || '#64748b',
-              border: 'none',
-            }}
-          >
-            {value}
-          </Tag>
-        )
-      },
+      render: (value: string) => <Text>{value}</Text>,
     },
     {
       title: '系数',
@@ -595,9 +629,7 @@ export default function CostEstimateConfig() {
       dataIndex: 'role',
       key: 'role',
       width: 120,
-      render: (value: string) => (
-        <Text style={{ fontWeight: 500, color: '#0f172a' }}>{value}</Text>
-      ),
+      render: (value: string) => <Text>{value}</Text>,
     },
     {
       title: '单价(元/天)',
@@ -616,8 +648,6 @@ export default function CostEstimateConfig() {
             setUnitPriceConfig(newConfig)
           }}
           style={{ width: '100%', borderRadius: 8 }}
-          formatter={(val) => `¥${val}`}
-          parser={(val) => Number(val?.replace('¥', '') || 0)}
         />
       ),
     },
@@ -636,61 +666,8 @@ export default function CostEstimateConfig() {
     },
   ]
 
-  // 弹窗表单配置
-  const modalFormItems = {
-    complexity: (
-      <>
-        <Form.Item name="level" label="复杂度等级" rules={[{ required: true, message: '请输入复杂度等级' }]}>
-          <Input placeholder="如：特高级" />
-        </Form.Item>
-        <Form.Item name="workdays" label="基准人天" rules={[{ required: true, message: '请输入基准人天' }]}>
-          <InputNumber min={1} max={30} style={{ width: '100%' }} placeholder="如：20" />
-        </Form.Item>
-      </>
-    ),
-    system: (
-      <>
-        <Form.Item name="systemCount" label="关联系统数" rules={[{ required: true, message: '请输入关联系统数' }]}>
-          <InputNumber min={1} max={20} style={{ width: '100%' }} placeholder="如：6" />
-        </Form.Item>
-        <Form.Item name="coefficient" label="系数" rules={[{ required: true, message: '请输入系数' }]}>
-          <InputNumber min={1} max={3} step={0.1} precision={2} style={{ width: '100%' }} placeholder="如：2.0" />
-        </Form.Item>
-      </>
-    ),
-    process: (
-      <>
-        <Form.Item name="stage" label="阶段名称" rules={[{ required: true, message: '请输入阶段名称' }]}>
-          <Input placeholder="如：数据迁移" />
-        </Form.Item>
-        <Form.Item name="coefficient" label="系数" rules={[{ required: true, message: '请输入系数' }]}>
-          <InputNumber min={0.01} max={1} step={0.01} precision={2} style={{ width: '100%' }} placeholder="如：0.05" />
-        </Form.Item>
-      </>
-    ),
-    techStack: (
-      <>
-        <Form.Item name="techType" label="技术类型" rules={[{ required: true, message: '请输入技术类型' }]}>
-          <Input placeholder="如：AI大模型" />
-        </Form.Item>
-        <Form.Item name="coefficient" label="系数" rules={[{ required: true, message: '请输入系数' }]}>
-          <InputNumber min={1} max={2} step={0.1} precision={2} style={{ width: '100%' }} placeholder="如：1.6" />
-        </Form.Item>
-      </>
-    ),
-    unitPrice: (
-      <>
-        <Form.Item name="role" label="角色名称" rules={[{ required: true, message: '请输入角色名称' }]}>
-          <Input placeholder="如：AI训练师" />
-        </Form.Item>
-        <Form.Item name="price" label="单价(元/天)" rules={[{ required: true, message: '请输入单价' }]}>
-          <InputNumber min={500} max={5000} step={100} style={{ width: '100%' }} placeholder="如：2500" />
-        </Form.Item>
-      </>
-    ),
-  }
-
-  const modalTitles = {
+  // 弹窗标题映射
+  const modalTitles: Record<string, string> = {
     complexity: '新增复杂度等级',
     system: '新增系统关联度',
     process: '新增流程阶段',
@@ -698,27 +675,239 @@ export default function CostEstimateConfig() {
     unitPrice: '新增角色单价',
   }
 
-  if (loading) {
+  // 弹窗表单字段映射
+  const renderModalForm = () => {
+    switch (modalType) {
+      case 'complexity':
+        return (
+          <>
+            <Form.Item name="level" label="复杂度等级" rules={[{ required: true, message: '请输入复杂度等级' }]}>
+              <Input placeholder="如：简单、一般、中等、复杂、极复杂" />
+            </Form.Item>
+            <Form.Item name="workdays" label="基准人天" rules={[{ required: true, message: '请输入基准人天' }]}>
+              <InputNumber min={1} max={30} style={{ width: '100%' }} placeholder="1-30" />
+            </Form.Item>
+          </>
+        )
+      case 'system':
+        return (
+          <>
+            <Form.Item name="systemCount" label="关联系统数" rules={[{ required: true, message: '请输入关联系统数' }]}>
+              <InputNumber min={1} max={10} style={{ width: '100%' }} placeholder="1-10" />
+            </Form.Item>
+            <Form.Item name="coefficient" label="系数" rules={[{ required: true, message: '请输入系数' }]}>
+              <InputNumber min={1} max={3} step={0.1} precision={2} style={{ width: '100%' }} placeholder="1.0-3.0" />
+            </Form.Item>
+          </>
+        )
+      case 'process':
+        return (
+          <>
+            <Form.Item name="stage" label="阶段名称" rules={[{ required: true, message: '请输入阶段名称' }]}>
+              <Input placeholder="如：需求分析、系统设计" />
+            </Form.Item>
+            <Form.Item name="coefficient" label="系数" rules={[{ required: true, message: '请输入系数' }]}>
+              <InputNumber min={0} max={1} step={0.01} precision={2} style={{ width: '100%' }} placeholder="0-1" />
+            </Form.Item>
+          </>
+        )
+      case 'techStack':
+        return (
+          <>
+            <Form.Item name="techType" label="技术类型" rules={[{ required: true, message: '请输入技术类型' }]}>
+              <Input placeholder="如：常规技术、新技术应用" />
+            </Form.Item>
+            <Form.Item name="coefficient" label="系数" rules={[{ required: true, message: '请输入系数' }]}>
+              <InputNumber min={1} max={2} step={0.1} precision={2} style={{ width: '100%' }} placeholder="1.0-2.0" />
+            </Form.Item>
+          </>
+        )
+      case 'unitPrice':
+        return (
+          <>
+            <Form.Item name="role" label="角色名称" rules={[{ required: true, message: '请输入角色名称' }]}>
+              <Input placeholder="如：项目经理、高级开发" />
+            </Form.Item>
+            <Form.Item name="price" label="人天单价(元)" rules={[{ required: true, message: '请输入人天单价' }]}>
+              <InputNumber min={500} max={5000} step={100} style={{ width: '100%' }} placeholder="500-5000" />
+            </Form.Item>
+          </>
+        )
+      default:
+        return null
+    }
+  }
+
+  // 配置卡片标题组件
+  const ConfigCardHeader = ({ title, subtitle, icon, color, onAdd }: {
+    title: string
+    subtitle: string
+    icon: React.ReactNode
+    color: string
+    onAdd?: () => void
+  }) => (
+    <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            background: `${color}15`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <span style={{ color, fontSize: 18 }}>{icon}</span>
+        </div>
+        <div>
+          <Text strong style={{ fontSize: 15, color: '#0f172a' }}>{title}</Text>
+          <br />
+          <Text type="secondary" style={{ fontSize: 12 }}>{subtitle}</Text>
+        </div>
+      </div>
+      {onAdd && (
+        <Button
+          type="text"
+          icon={<PlusOutlined />}
+          onClick={onAdd}
+          style={{ color }}
+        >
+          新增
+        </Button>
+      )}
+    </div>
+  )
+
+  // 渲染项目列表页面
+  if (!projectId) {
     return (
       <div className="page-container">
-        <Card style={{ borderRadius: 16 }}>
-          <Spin size="large" description="加载默认配置..." />
+        {/* 步骤条 */}
+        <Card
+          style={{
+            borderRadius: 20,
+            marginBottom: 32,
+            border: '1px solid var(--color-border-light)',
+          }}
+        >
+          <Steps current={currentStep} items={stepItems} />
+        </Card>
+
+        {/* 功能介绍区域 */}
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+            borderRadius: 24,
+            padding: '48px 48px',
+            marginBottom: 32,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+            <div
+              style={{
+                width: 68,
+                height: 68,
+                borderRadius: 18,
+                background: 'rgba(255, 255, 255, 0.18)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <SettingOutlined style={{ fontSize: 32, color: '#fff' }} />
+            </div>
+            <div>
+              <Title level={3} style={{ color: '#fff', margin: 0, marginBottom: 10 }}>
+                参数配置
+              </Title>
+              <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 15 }}>
+                选择项目进行参数配置，或开始新的成本预估
+              </Text>
+            </div>
+          </div>
+        </div>
+
+        {/* 统计概览 */}
+        <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
+          <Col xs={12} sm={8}>
+            <Card style={{ borderRadius: 16, border: '1px solid var(--color-border-light)' }}>
+              <Statistic
+                title="可配置项目"
+                value={totalProjects}
+                suffix="个"
+                valueStyle={{ color: '#3B82F6' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={8}>
+            <Card style={{ borderRadius: 16, border: '1px solid var(--color-border-light)' }}>
+              <Statistic
+                title="已配置"
+                value={projects.filter(p => p.estimateConfigs && p.estimateConfigs.length > 0).length}
+                suffix="个"
+                valueStyle={{ color: '#10B981' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={8}>
+            <Card style={{ borderRadius: 16, border: '1px solid var(--color-border-light)' }}>
+              <Statistic
+                title="待配置"
+                value={projects.filter(p => !p.estimateConfigs || p.estimateConfigs.length === 0).length}
+                suffix="个"
+                valueStyle={{ color: '#F59E0B' }}
+              />
+            </Card>
+          </Col>
+        </Row>
+
+        {/* 项目列表 */}
+        <Card
+          style={{
+            borderRadius: 24,
+            border: '1px solid var(--color-border-light)',
+          }}
+        >
+          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Title level={4} style={{ margin: 0 }}>
+              <SettingOutlined style={{ marginRight: 10, color: '#10B981' }} />
+              项目列表
+            </Title>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => navigate('/cost-estimate/upload')}
+              style={{
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)',
+                border: 'none',
+              }}
+            >
+              新建预估
+            </Button>
+          </div>
+
+          <Table
+            columns={projectColumns}
+            dataSource={projects}
+            rowKey="id"
+            loading={projectsLoading}
+            pagination={{ pageSize: 10, showSizeChanger: false }}
+            locale={{ emptyText: '暂无可配置的项目，请先上传需求文档' }}
+          />
         </Card>
       </div>
     )
   }
 
-  if (!projectId) {
+  // 渲染配置编辑页面
+  if (loading) {
     return (
       <div className="page-container">
         <Card style={{ borderRadius: 16 }}>
-          <Empty
-            description="缺少项目ID，请先上传需求文档"
-          >
-            <Button type="primary" onClick={() => navigate('/cost-estimate/upload')}>
-              前往上传
-            </Button>
-          </Empty>
+          <Spin size="large" tip="加载配置..." />
         </Card>
       </div>
     )
@@ -744,11 +933,9 @@ export default function CostEstimateConfig() {
           borderRadius: 24,
           padding: '48px 48px',
           marginBottom: 32,
-          position: 'relative',
-          overflow: 'hidden',
         }}
       >
-        <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
           <div
             style={{
               width: 68,
@@ -766,14 +953,14 @@ export default function CostEstimateConfig() {
             <Title level={3} style={{ color: '#fff', margin: 0, marginBottom: 10 }}>
               参数配置
             </Title>
-            <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 15, lineHeight: 1.6 }}>
+            <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 15 }}>
               根据项目实际情况调整计算参数，获得更精准的成本预估结果
             </Text>
           </div>
         </div>
       </div>
 
-      {/* 配置卡片 - 更大间距 */}
+      {/* 配置卡片 */}
       <Row gutter={[24, 24]}>
         {/* 复杂度基准配置 */}
         <Col xs={24} lg={12}>
@@ -791,13 +978,17 @@ export default function CostEstimateConfig() {
               color="#3B82F6"
               onAdd={() => openAddModal('complexity')}
             />
-            <Table
-              columns={complexityColumns}
-              dataSource={complexityConfig}
-              rowKey="level"
-              pagination={false}
-              size="small"
-            />
+            {complexityConfig.length > 0 ? (
+              <Table
+                columns={complexityColumns}
+                dataSource={complexityConfig}
+                rowKey="level"
+                pagination={false}
+                size="small"
+              />
+            ) : (
+              <Empty description="暂无配置，请添加" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
           </Card>
         </Col>
 
@@ -817,13 +1008,17 @@ export default function CostEstimateConfig() {
               color="#8B5CF6"
               onAdd={() => openAddModal('system')}
             />
-            <Table
-              columns={systemCoefficientColumns}
-              dataSource={systemCoefficientConfig}
-              rowKey="systemCount"
-              pagination={false}
-              size="small"
-            />
+            {systemCoefficientConfig.length > 0 ? (
+              <Table
+                columns={systemCoefficientColumns}
+                dataSource={systemCoefficientConfig}
+                rowKey="systemCount"
+                pagination={false}
+                size="small"
+              />
+            ) : (
+              <Empty description="暂无配置，请添加" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
           </Card>
         </Col>
 
@@ -843,13 +1038,17 @@ export default function CostEstimateConfig() {
               color="#10B981"
               onAdd={() => openAddModal('process')}
             />
-            <Table
-              columns={processCoefficientColumns}
-              dataSource={processCoefficientConfig}
-              rowKey="stage"
-              pagination={false}
-              size="small"
-            />
+            {processCoefficientConfig.length > 0 ? (
+              <Table
+                columns={processCoefficientColumns}
+                dataSource={processCoefficientConfig}
+                rowKey="stage"
+                pagination={false}
+                size="small"
+              />
+            ) : (
+              <Empty description="暂无配置，请添加" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
           </Card>
         </Col>
 
@@ -869,13 +1068,17 @@ export default function CostEstimateConfig() {
               color="#F59E0B"
               onAdd={() => openAddModal('techStack')}
             />
-            <Table
-              columns={techStackCoefficientColumns}
-              dataSource={techStackCoefficientConfig}
-              rowKey="techType"
-              pagination={false}
-              size="small"
-            />
+            {techStackCoefficientConfig.length > 0 ? (
+              <Table
+                columns={techStackCoefficientColumns}
+                dataSource={techStackCoefficientConfig}
+                rowKey="techType"
+                pagination={false}
+                size="small"
+              />
+            ) : (
+              <Empty description="暂无配置，请添加" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
           </Card>
         </Col>
 
@@ -895,13 +1098,17 @@ export default function CostEstimateConfig() {
               color="#EF4444"
               onAdd={() => openAddModal('unitPrice')}
             />
-            <Table
-              columns={unitPriceColumns}
-              dataSource={unitPriceConfig}
-              rowKey="role"
-              pagination={false}
-              size="small"
-            />
+            {unitPriceConfig.length > 0 ? (
+              <Table
+                columns={unitPriceColumns}
+                dataSource={unitPriceConfig}
+                rowKey="role"
+                pagination={false}
+                size="small"
+              />
+            ) : (
+              <Empty description="暂无配置，请添加" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
           </Card>
         </Col>
 
@@ -956,11 +1163,11 @@ export default function CostEstimateConfig() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button
             size="large"
-            onClick={() => navigate('/cost-estimate/upload')}
+            onClick={() => navigate('/cost-estimate/config')}
             style={{ borderRadius: 14, height: 48 }}
           >
             <ArrowLeftOutlined style={{ marginRight: 8 }} />
-            上一步：文件上传
+            返回列表
           </Button>
           <div style={{ display: 'flex', gap: 16 }}>
             <Button
@@ -970,12 +1177,11 @@ export default function CostEstimateConfig() {
               loading={saving}
               style={{ borderRadius: 14, height: 48 }}
             >
-              保存参数模板
+              保存配置
             </Button>
             <Button
               type="primary"
               size="large"
-              icon={<ArrowRightOutlined />}
               onClick={handleNext}
               loading={saving}
               style={{
@@ -986,7 +1192,7 @@ export default function CostEstimateConfig() {
                 fontWeight: 600,
               }}
             >
-              下一步：查看解析结果
+              开始计算
               <ArrowRightOutlined style={{ marginLeft: 8 }} />
             </Button>
           </div>
@@ -1003,7 +1209,7 @@ export default function CostEstimateConfig() {
         cancelText="取消"
       >
         <Form form={form} layout="vertical">
-          {modalFormItems[modalType]}
+          {renderModalForm()}
         </Form>
       </Modal>
     </div>

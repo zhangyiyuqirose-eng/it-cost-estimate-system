@@ -26,7 +26,7 @@ import { estimateApi } from '@/api'
 const { Title, Text, Paragraph } = Typography
 const { Dragger } = Upload
 
-// 步骤条配置（4步）
+// 步骤条配置（4步）- 调整顺序：上传->解析->配置->结果
 const stepItems = [
   {
     title: '文件上传',
@@ -34,14 +34,14 @@ const stepItems = [
     icon: <FileTextOutlined />,
   },
   {
+    title: '文档解析',
+    description: '查看功能点详情',
+    icon: <FileSearchOutlined />,
+  },
+  {
     title: '参数配置',
     description: '配置计算参数',
     icon: <SettingOutlined />,
-  },
-  {
-    title: '文档解析结果',
-    description: '查看功能点详情',
-    icon: <FileSearchOutlined />,
   },
   {
     title: '结果展示',
@@ -359,7 +359,7 @@ export default function CostEstimateUpload() {
             type="primary"
             size="large"
             disabled={!uploadedProjectId}
-            onClick={() => navigate(`/cost-estimate/config?projectId=${uploadedProjectId}`)}
+            onClick={() => navigate(`/cost-estimate/parse-result?projectId=${uploadedProjectId}`)}
             style={{
               borderRadius: 14,
               height: 48,
@@ -370,7 +370,7 @@ export default function CostEstimateUpload() {
               fontWeight: 600,
             }}
           >
-            下一步：参数配置
+            下一步：文档解析
             <ArrowRightOutlined style={{ marginLeft: 10 }} />
           </Button>
         </div>

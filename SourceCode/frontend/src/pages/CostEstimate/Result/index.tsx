@@ -15,6 +15,7 @@ import {
   Progress,
   Space,
   Tooltip,
+  Statistic,
 } from 'antd'
 import {
   FileTextOutlined,
@@ -31,10 +32,12 @@ import {
   TeamOutlined,
   DashboardOutlined,
   ThunderboltOutlined,
+  PlusOutlined,
+  EyeOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { Pie, Column } from '@ant-design/charts'
-import { estimateApi } from '@/api'
+import { estimateApi, projectApi } from '@/api'
 import type {
   EstimateResult,
   StageBreakdown,
@@ -43,7 +46,7 @@ import type {
 
 const { Title, Text } = Typography
 
-// 步骤条配置（4步）
+// 步骤条配置（4步）- 调整顺序：上传->解析->配置->结果
 const stepItems = [
   {
     title: '文件上传',
@@ -51,14 +54,14 @@ const stepItems = [
     icon: <FileTextOutlined />,
   },
   {
+    title: '文档解析',
+    description: '查看功能点详情',
+    icon: <FileSearchOutlined />,
+  },
+  {
     title: '参数配置',
     description: '配置计算参数',
     icon: <SettingOutlined />,
-  },
-  {
-    title: '文档解析结果',
-    description: '查看功能点详情',
-    icon: <FileSearchOutlined />,
   },
   {
     title: '结果展示',
@@ -66,6 +69,19 @@ const stepItems = [
     icon: <BarChartOutlined />,
   },
 ]
+
+// 项目列表项
+interface ProjectListItem {
+  id: number
+  projectName: string
+  projectType: string | null
+  contractAmount: number | null
+  status: string
+  createdAt: string
+  members: Array<{ id: number; name: string; level: string; role: string | null }>
+  estimateResults: Array<{ id: number; totalManDay: number; totalCost: number }>
+  estimateConfigs: Array<{ id: number }>
+}
 
 // 统计卡片组件 - 简约现代风格
 interface StatCardProps {
@@ -144,8 +160,41 @@ export default function CostEstimateResult() {
   const [exporting, setExporting] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
 
+  // 项目列表状态
+  const [projects, setProjects] = useState<ProjectListItem[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(false)
+  const [totalProjects, setTotalProjects] = useState(0)
+
   // 结果数据
   const [result, setResult] = useState<EstimateResult | null>(null)
+
+  // 加载项目列表（当没有projectId时）
+  useEffect(() => {
+    if (!projectId) {
+      loadProjects()
+    }
+  }, [projectId])
+
+  // 加载项目列表
+  const loadProjects = async () => {
+    setProjectsLoading(true)
+    try {
+      const response = await projectApi.getList({ pageSize: 100 })
+      if (response.data.code === 0 || response.data.code === 200) {
+        const projectData = response.data.data || []
+        // 过滤出有预估结果的项目
+        const projectsWithResults = projectData.filter((p: any) =>
+          p.estimateResults && p.estimateResults.length > 0
+        )
+        setProjects(projectsWithResults)
+        setTotalProjects(projectsWithResults.length)
+      }
+    } catch {
+      message.error('加载项目列表失败')
+    } finally {
+      setProjectsLoading(false)
+    }
+  }
 
   // 加载结果数据
   useEffect(() => {
@@ -596,6 +645,81 @@ export default function CostEstimateResult() {
     },
   ]
 
+  // 项目列表表格列配置
+  const projectColumns: ColumnsType<ProjectListItem> = [
+    {
+      title: '项目名称',
+      dataIndex: 'projectName',
+      key: 'projectName',
+      width: 200,
+      render: (value: string) => (
+        <Text strong style={{ color: '#0f172a' }}>{value}</Text>
+      )
+    },
+    {
+      title: '项目类型',
+      dataIndex: 'projectType',
+      key: 'projectType',
+      width: 100,
+      render: (value: string) => value ? (
+        <Tag style={{ borderRadius: 8, background: '#3B82F615', color: '#3B82F6', border: 'none' }}>
+          {value}
+        </Tag>
+      ) : '-'
+    },
+    {
+      title: '团队成员',
+      key: 'members',
+      width: 100,
+      render: (_: any, record: ProjectListItem) => (
+        <Tag style={{ borderRadius: 8, background: '#8B5CF615', color: '#8B5CF6', border: 'none' }}>
+          {record.members?.length || 0} 人
+        </Tag>
+      )
+    },
+    {
+      title: '预估结果',
+      key: 'estimateResult',
+      width: 150,
+      render: (_: any, record: ProjectListItem) => {
+        const result = record.estimateResults?.[0]
+        if (result) {
+          return (
+            <div>
+              <Text style={{ color: '#10B981', fontWeight: 500 }}>{result.totalManDay.toFixed(1)} 人天</Text>
+              <br />
+              <Text type="secondary" style={{ fontSize: 12 }}>¥{result.totalCost.toFixed(0)}</Text>
+            </div>
+          )
+        }
+        return <Tag style={{ borderRadius: 8, background: '#F59E0B15', color: '#F59E0B', border: 'none' }}>未计算</Tag>
+      }
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 120,
+      render: (value: string) => new Date(value).toLocaleDateString('zh-CN')
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 120,
+      render: (_: any, record: ProjectListItem) => (
+        <Button
+          type="primary"
+          size="small"
+          icon={<EyeOutlined />}
+          onClick={() => navigate(`/cost-estimate/result?projectId=${record.id}`)}
+          style={{ borderRadius: 8 }}
+        >
+          查看结果
+        </Button>
+      )
+    }
+  ]
+
   // 占比合规校验结果
   const complianceChecks = result?.stageBreakdown?.map((stage) => {
     const expectedRanges: Record<string, { min: number; max: number }> = {
@@ -618,6 +742,130 @@ export default function CostEstimateResult() {
       isCompliant,
     }
   }) || []
+
+  // 渲染项目列表页面（当没有projectId时）
+  if (!projectId) {
+    return (
+      <div className="page-container">
+        {/* 步骤条 */}
+        <Card
+          style={{
+            borderRadius: 20,
+            marginBottom: 32,
+            border: '1px solid var(--color-border-light)',
+          }}
+        >
+          <Steps current={currentStep} items={stepItems} />
+        </Card>
+
+        {/* 功能介绍区域 */}
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
+            borderRadius: 24,
+            padding: '48px 48px',
+            marginBottom: 32,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+            <div
+              style={{
+                width: 68,
+                height: 68,
+                borderRadius: 18,
+                background: 'rgba(255, 255, 255, 0.18)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <BarChartOutlined style={{ fontSize: 32, color: '#fff' }} />
+            </div>
+            <div>
+              <Title level={3} style={{ color: '#fff', margin: 0, marginBottom: 10 }}>
+                预估结果
+              </Title>
+              <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 15 }}>
+                查看已完成成本预估的项目结果
+              </Text>
+            </div>
+          </div>
+        </div>
+
+        {/* 统计概览 */}
+        <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
+          <Col xs={12} sm={8}>
+            <Card style={{ borderRadius: 16, border: '1px solid var(--color-border-light)' }}>
+              <Statistic
+                title="已预估项目"
+                value={totalProjects}
+                suffix="个"
+                valueStyle={{ color: '#8B5CF6' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={8}>
+            <Card style={{ borderRadius: 16, border: '1px solid var(--color-border-light)' }}>
+              <Statistic
+                title="总人天"
+                value={projects.reduce((sum, p) => sum + (p.estimateResults?.[0]?.totalManDay || 0), 0)}
+                suffix="天"
+                precision={1}
+                valueStyle={{ color: '#3B82F6' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={8}>
+            <Card style={{ borderRadius: 16, border: '1px solid var(--color-border-light)' }}>
+              <Statistic
+                title="总成本"
+                value={projects.reduce((sum, p) => sum + (p.estimateResults?.[0]?.totalCost || 0), 0)}
+                suffix="元"
+                precision={0}
+                valueStyle={{ color: '#EF4444' }}
+              />
+            </Card>
+          </Col>
+        </Row>
+
+        {/* 项目列表 */}
+        <Card
+          style={{
+            borderRadius: 24,
+            border: '1px solid var(--color-border-light)',
+          }}
+        >
+          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Title level={4} style={{ margin: 0 }}>
+              <BarChartOutlined style={{ marginRight: 10, color: '#8B5CF6' }} />
+              项目列表
+            </Title>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => navigate('/cost-estimate/upload')}
+              style={{
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)',
+                border: 'none',
+              }}
+            >
+              新建预估
+            </Button>
+          </div>
+
+          <Table
+            columns={projectColumns}
+            dataSource={projects}
+            rowKey="id"
+            loading={projectsLoading}
+            pagination={{ pageSize: 10, showSizeChanger: false }}
+            locale={{ emptyText: '暂无预估结果，请先完成成本预估流程' }}
+          />
+        </Card>
+      </div>
+    )
+  }
 
   if (loading) {
     return (
@@ -1026,11 +1274,11 @@ export default function CostEstimateResult() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button
             size="large"
-            onClick={() => navigate(`/cost-estimate/parse-result?projectId=${projectId}`)}
+            onClick={() => navigate('/cost-estimate/result')}
             style={{ borderRadius: 14, height: 48 }}
           >
             <ArrowLeftOutlined style={{ marginRight: 8 }} />
-            上一步：解析结果
+            返回列表
           </Button>
           <Space>
             <Tooltip title="重新计算成本预估">

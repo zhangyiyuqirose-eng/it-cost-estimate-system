@@ -16,6 +16,7 @@ import {
   MemberCostDetail,
   AuthenticatedRequest
 } from '../types'
+import { aiService } from '../services/aiService'
 
 const router = Router()
 
@@ -82,25 +83,40 @@ const verifyProjectOwnership = async (projectId: number, userId: number): Promis
 }
 
 /**
- * 模拟 OCR 识别（实际项目中应接入真实的 OCR 服务）
+ * 真实 OCR 识别 - 调用 Qwen/Qwen3-Omni-30B-A3B-Thinking 多模态模型
  */
-const mockOcrRecognition = async (filePath: string): Promise<OcrResult> => {
-  // 模拟识别结果 - 实际项目中应调用 OCR API
+const performOcrRecognition = async (filePath: string): Promise<OcrResult> => {
+  console.log(`[Consumption] 开始真实OCR识别: ${filePath}`)
+
+  // 读取图片并转换为 base64
+  const imageBuffer = fs.readFileSync(filePath)
+  const imageBase64 = imageBuffer.toString('base64')
+
+  // 调用 AI 服务的 OCR 方法
+  const ocrData = await aiService.recognizeOCR(imageBase64)
+
   return {
     projectInfo: {
-      projectName: '数字化项目',
-      projectManager: '张三',
-      startDate: '2024-01-01',
-      endDate: '2024-12-31',
+      projectName: '数字化项目', // OCR 可能无法识别项目名称
+      projectManager: '',
+      startDate: dayjs().format('YYYY-MM-DD'),
+      endDate: dayjs().add(1, 'year').format('YYYY-MM-DD'),
       status: '进行中'
     },
-    memberInfo: [
-      { name: '张三', level: 'P7', role: '项目经理', reportedHours: 800 },
-      { name: '李四', level: 'P6', role: '开发工程师', reportedHours: 600 },
-      { name: '王五', level: 'P6', role: '开发工程师', reportedHours: 500 },
-      { name: '赵六', level: 'P5', role: '测试工程师', reportedHours: 400 }
-    ],
-    rawText: '模拟的OCR识别文本内容...'
+    memberInfo: ocrData.members?.map(m => ({
+      name: m.name || '',
+      level: m.level || 'P5',
+      role: m.role || '',
+      reportedHours: m.reportedHours || 0
+    })) || [],
+    // OCR 返回的财务数据
+    contractAmount: ocrData.contractAmount,
+    preSaleRatio: ocrData.preSaleRatio,
+    taxRate: ocrData.taxRate,
+    externalLaborCost: ocrData.externalLaborCost,
+    externalSoftwareCost: ocrData.externalSoftwareCost,
+    currentManpowerCost: ocrData.currentManpowerCost,
+    rawText: '真实OCR识别结果'
   }
 }
 
@@ -152,7 +168,7 @@ const calculateBurnoutDate = (
 // ==================== 路由定义 ====================
 
 /**
- * POST /ocr - OCR识别OA截图
+ * POST /ocr - OCR识别OA截图（真实调用 AI 服务）
  */
 router.post('/ocr', authMiddleware, upload.single('image'), async (req: Request, res: Response) => {
   try {
@@ -164,6 +180,8 @@ router.post('/ocr', authMiddleware, upload.single('image'), async (req: Request,
       return sendError(res, 400, '请上传截图文件')
     }
 
+    console.log(`[Consumption] 收到OCR识别请求，文件: ${file.originalname}`)
+
     // 创建项目
     const project = await prisma.project.create({
       data: {
@@ -174,9 +192,11 @@ router.post('/ocr', authMiddleware, upload.single('image'), async (req: Request,
       }
     })
 
-    // OCR识别
+    // 真实 OCR 识别
     const filePath = path.join(uploadDir, file.filename)
-    const ocrResult = await mockOcrRecognition(filePath)
+    const ocrResult = await performOcrRecognition(filePath)
+
+    console.log(`[Consumption] OCR识别结果: 合同金额=${ocrResult.contractAmount}, 人力成本=${ocrResult.currentManpowerCost}`)
 
     // 根据识别结果创建成员
     if (ocrResult.memberInfo && ocrResult.memberInfo.length > 0) {
@@ -199,15 +219,23 @@ router.post('/ocr', authMiddleware, upload.single('image'), async (req: Request,
       }
     }
 
-    const response: OcrResult = {
+    const response: OcrResult & { projectId: number; contractAmount?: number; preSaleRatio?: number; taxRate?: number; externalLaborCost?: number; externalSoftwareCost?: number; currentManpowerCost?: number } = {
       ...ocrResult,
+      projectId: project.id,
       projectInfo: {
         ...ocrResult.projectInfo,
         projectName: ocrResult.projectInfo.projectName || project.projectName
-      }
+      },
+      // 添加财务数据
+      contractAmount: ocrResult.contractAmount,
+      preSaleRatio: ocrResult.preSaleRatio,
+      taxRate: ocrResult.taxRate,
+      externalLaborCost: ocrResult.externalLaborCost,
+      externalSoftwareCost: ocrResult.externalSoftwareCost,
+      currentManpowerCost: ocrResult.currentManpowerCost
     }
 
-    sendResponse(res, { ...response, projectId: project.id }, 'OCR识别成功')
+    sendResponse(res, response, 'OCR识别成功')
   } catch (error) {
     console.error('OCR error:', error)
     sendError(res, 500, 'OCR识别失败')

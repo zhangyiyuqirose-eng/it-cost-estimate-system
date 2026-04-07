@@ -76,16 +76,28 @@ interface DeviationAnalysisResult {
 }
 
 class AIService {
+  // 文本推理模型配置（用于成本预估等功能）
   private apiUrl: string
   private apiKey: string
   private model: string
 
+  // OCR多模态模型配置（用于成本消耗、偏差监控的图像识别）
+  private ocrApiUrl: string
+  private ocrApiKey: string
+  private ocrModel: string
+
   constructor() {
-    // 使用新的配置
+    // 文本推理模型配置 - qwq-32b（不支持图像）
     this.apiUrl = process.env.AI_API_URL || 'https://www.finna.com.cn/v1/chat/completions'
     this.apiKey = process.env.AI_API_KEY || 'app-PvoiFWuSXcN4kwCBuplgOnnC'
     this.model = process.env.AI_MODEL || 'qwq-32b'
-    console.log(`[AI Service] 初始化完成，API: ${this.apiUrl}, 模型: ${this.model}`)
+
+    // OCR多模态模型配置 - Qwen/Qwen3-Omni-30B-A3B-Thinking（支持图像识别）
+    this.ocrApiUrl = process.env.OCR_API_URL || 'https://www.finna.com.cn/v1/chat/completions'
+    this.ocrApiKey = process.env.OCR_API_KEY || 'app-KyYotJ6hzYVDIzQVVOJFzZgd'
+    this.ocrModel = process.env.OCR_MODEL || 'Qwen/Qwen3-Omni-30B-A3B-Thinking'
+
+    console.log(`[AI Service] 文本推理模型: ${this.model}, OCR模型: ${this.ocrModel}`)
   }
 
   /**
@@ -274,9 +286,12 @@ ${documentText.substring(0, 12000)}`
   }
 
   /**
-   * OCR识别OA截图（使用 OpenAI 多模态格式）
+   * OCR识别OA截图（使用 Qwen/Qwen3-Omni-30B-A3B-Thinking 多模态模型）
+   * 用于成本消耗预估模块
    */
   async recognizeOCR(imageBase64: string): Promise<OCRResult> {
+    console.log(`[AI Service] 开始OCR识别，使用模型: ${this.ocrModel}`)
+
     const systemPrompt = `你是一个专业的财务数据分析师。请分析用户提供的OA系统截图，提取以下财务信息：
 1. 合同金额（万元）
 2. 售前比例（小数，如0.15表示15%）
@@ -295,21 +310,23 @@ ${documentText.substring(0, 12000)}`
   "externalSoftwareCost": 0,
   "currentManpowerCost": 0,
   "members": [{"name": "", "level": "P5|P6|P7|P8", "role": "", "reportedHours": 0}]
-}`
+}
+
+只返回JSON，不要返回其他内容。如果图片中无法找到某项信息，对应字段填0或空数组。`
 
     try {
       const response = await axios.post<AIResponse>(
-        this.apiUrl,
+        this.ocrApiUrl,
         {
-          model: this.model,
-          temperature: 0.7,
+          model: this.ocrModel,
+          temperature: 0.3, // 降低温度提高识别准确性
           stream: false,
           messages: [
             { role: 'system', content: systemPrompt },
             {
               role: 'user',
               content: [
-                { type: 'text', text: '请识别并提取图片中的财务数据。' },
+                { type: 'text', text: '请识别并提取图片中的财务数据。仔细观察图片中的所有数字和文字信息。' },
                 { type: 'image_url', image_url: { url: `data:image/png;base64,${imageBase64}` } }
               ]
             }
@@ -317,24 +334,31 @@ ${documentText.substring(0, 12000)}`
         },
         {
           headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
+            'Authorization': `Bearer ${this.ocrApiKey}`,
             'Content-Type': 'application/json; charset=utf-8'
           },
-          timeout: 60000
+          timeout: 120000 // OCR需要更长超时
         }
       )
 
       if (response.data.choices && response.data.choices.length > 0) {
         const text = response.data.choices[0].message.content
+        console.log(`[AI Service] OCR识别返回内容长度: ${text.length}`)
+
         const jsonMatch = text.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
-          return JSON.parse(jsonMatch[0])
+          const result = JSON.parse(jsonMatch[0])
+          console.log(`[AI Service] OCR识别成功:`, JSON.stringify(result))
+          return result
+        } else {
+          console.error('[AI Service] OCR返回内容无法解析为JSON:', text.substring(0, 500))
         }
       }
-    } catch (error) {
-      console.error('[AI Service] OCR 识别错误:', error)
+    } catch (error: any) {
+      console.error('[AI Service] OCR识别错误:', error?.response?.data || error?.message)
     }
 
+    // 返回默认值
     return {
       contractAmount: 0,
       preSaleRatio: 0,
@@ -385,19 +409,31 @@ ${data.teamCosts.map(t => `- ${t.team}: 预期${t.expected}万, 实际${t.actual
   }
 
   /**
-   * 识别项目偏差截图（使用 OpenAI 多模态格式）
+   * 识别项目偏差截图（使用 Qwen/Qwen3-Omni-30B-A3B-Thinking 多模态模型）
+   * 用于偏差监控模块
    */
   async recognizeProjectScreenshots(
     screenshots: { type: string; base64: string }[]
   ): Promise<DeviationAnalysisResult> {
+    console.log(`[AI Service] 开始偏差截图识别，截图数量: ${screenshots.length}, 使用模型: ${this.ocrModel}`)
+
     const systemPrompt = `你是一个专业的IT项目管理助手。请分析用户提供的项目截图（包括合同金额、人力成本、成员明细、任务进度等），提取以下信息：
 1. 项目名称
 2. 合同金额（万元）
 3. 当前人力成本（万元）
 4. 任务完成进度（百分比）
-5. 项目成员信息
+5. 项目成员信息（姓名、级别、角色、已报工时）
 
-请以JSON格式返回结果。`
+请以JSON格式返回结果，格式如下：
+{
+  "projectName": "",
+  "contractAmount": 0,
+  "currentManpowerCost": 0,
+  "taskProgress": 0,
+  "members": [{"name": "", "level": "P5|P6|P7|P8", "role": "", "reportedHours": 0}]
+}
+
+只返回JSON，不要返回其他内容。如果图片中无法找到某项信息，对应字段填0或空数组。`
 
     const results: DeviationAnalysisResult = {
       projectName: '',
@@ -410,18 +446,20 @@ ${data.teamCosts.map(t => `- ${t.team}: 预期${t.expected}万, 实际${t.actual
 
     for (const screenshot of screenshots) {
       try {
+        console.log(`[AI Service] 正在识别 ${screenshot.type} 类型截图`)
+
         const response = await axios.post<AIResponse>(
-          this.apiUrl,
+          this.ocrApiUrl,
           {
-            model: this.model,
-            temperature: 0.7,
+            model: this.ocrModel,
+            temperature: 0.3, // 降低温度提高识别准确性
             stream: false,
             messages: [
               { role: 'system', content: systemPrompt },
               {
                 role: 'user',
                 content: [
-                  { type: 'text', text: `请识别这张${screenshot.type}类型的截图并提取关键信息。` },
+                  { type: 'text', text: `请识别这张${screenshot.type}类型的截图并提取关键信息。仔细观察图片中的所有数字和文字。` },
                   { type: 'image_url', image_url: { url: `data:image/png;base64,${screenshot.base64}` } }
                 ]
               }
@@ -429,26 +467,34 @@ ${data.teamCosts.map(t => `- ${t.team}: 预期${t.expected}万, 实际${t.actual
           },
           {
             headers: {
-              'Authorization': `Bearer ${this.apiKey}`,
+              'Authorization': `Bearer ${this.ocrApiKey}`,
               'Content-Type': 'application/json; charset=utf-8'
             },
-            timeout: 60000
+            timeout: 120000
           }
         )
 
         if (response.data.choices && response.data.choices.length > 0) {
           const text = response.data.choices[0].message.content
+          console.log(`[AI Service] ${screenshot.type} 截图识别返回长度: ${text.length}`)
+
           const jsonMatch = text.match(/\{[\s\S]*\}/)
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0])
-            Object.assign(results, parsed)
+            // 合并结果，优先使用非空值
+            if (parsed.projectName && !results.projectName) results.projectName = parsed.projectName
+            if (parsed.contractAmount && !results.contractAmount) results.contractAmount = parsed.contractAmount
+            if (parsed.currentManpowerCost && !results.currentManpowerCost) results.currentManpowerCost = parsed.currentManpowerCost
+            if (parsed.taskProgress && !results.taskProgress) results.taskProgress = parsed.taskProgress
+            if (parsed.members && parsed.members.length > 0 && results.members.length === 0) results.members = parsed.members
           }
         }
-      } catch (error) {
-        console.error('[AI Service] 截图识别错误:', error)
+      } catch (error: any) {
+        console.error(`[AI Service] ${screenshot.type} 截图识别错误:`, error?.response?.data || error?.message)
       }
     }
 
+    console.log(`[AI Service] 偏差截图识别完成:`, JSON.stringify(results))
     return results
   }
 

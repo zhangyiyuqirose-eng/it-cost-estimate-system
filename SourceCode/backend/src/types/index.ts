@@ -195,6 +195,13 @@ export interface OcrResult {
     role?: string
     reportedHours?: number
   }>
+  // OCR 识别的财务数据
+  contractAmount?: number
+  preSaleRatio?: number
+  taxRate?: number
+  externalLaborCost?: number
+  externalSoftwareCost?: number
+  currentManpowerCost?: number
   rawText?: string
 }
 
@@ -254,6 +261,13 @@ export interface RecognizeResult {
   currentCostConsumption: number
   taskProgress: number
   stageInfo: StageInfo[]
+  projectName?: string
+  members?: Array<{
+    name: string
+    level: string
+    role?: string
+    reportedHours?: number
+  }>
   rawText?: string
 }
 

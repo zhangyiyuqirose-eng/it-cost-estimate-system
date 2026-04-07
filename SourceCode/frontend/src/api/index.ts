@@ -220,6 +220,10 @@ export const estimateApi = {
   getParseResult: (projectId: number) =>
     api.get<ApiResponse<any>>(`/estimate/${projectId}/parse-result`),
 
+  // 更新解析结果（功能点编辑）
+  updateParseResult: (projectId: number, data: { modules: any[] }) =>
+    api.put<ApiResponse<any>>(`/estimate/${projectId}/parse-result`, data),
+
   getDefaultConfig: () =>
     api.get<ApiResponse<any>>('/estimate/config/default'),
 

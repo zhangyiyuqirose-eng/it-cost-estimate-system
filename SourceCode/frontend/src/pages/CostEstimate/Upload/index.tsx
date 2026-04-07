@@ -151,17 +151,6 @@ export default function CostEstimateUpload() {
 
   return (
     <div className="page-container">
-      {/* 步骤条 */}
-      <Card
-        style={{
-          borderRadius: 20,
-          marginBottom: 32,
-          border: '1px solid var(--color-border-light)',
-        }}
-      >
-        <Steps current={currentStep} items={stepItems} />
-      </Card>
-
       {/* 功能介绍区域 - 简约风格 */}
       <div
         style={{
@@ -197,6 +186,17 @@ export default function CostEstimateUpload() {
           </div>
         </div>
       </div>
+
+      {/* 步骤条 */}
+      <Card
+        style={{
+          borderRadius: 20,
+          marginBottom: 32,
+          border: '1px solid var(--color-border-light)',
+        }}
+      >
+        <Steps current={currentStep} items={stepItems} />
+      </Card>
 
       {/* 上传区域 */}
       <Card

@@ -14,6 +14,9 @@ import {
   Row,
   Col,
   Statistic,
+  Select,
+  InputNumber,
+  Space,
 } from 'antd'
 import {
   FileTextOutlined,
@@ -29,6 +32,9 @@ import {
   CodeOutlined,
   SyncOutlined,
   CheckCircleOutlined,
+  EditOutlined,
+  SaveOutlined,
+  CloseOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { estimateApi } from '@/api'
@@ -96,6 +102,11 @@ export default function CostEstimateParseResult() {
   const [parsing, setParsing] = useState(false)
   const [parseResult, setParseResult] = useState<ParseResultData | null>(null)
   const [parseProgress, setParseProgress] = useState(0) // 解析进度 0-100
+
+  // 功能点编辑状态
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+  const [editingData, setEditingData] = useState<{ complexity?: string; associationSystems?: number }>({})
+  const [savingEdit, setSavingEdit] = useState(false)
 
   // 加载解析结果
   useEffect(() => {
@@ -307,6 +318,59 @@ export default function CostEstimateParseResult() {
     )
   }
 
+  // 保存功能点编辑
+  const handleSaveEdit = async (record: FunctionPoint, _funcIndex: number) => {
+    if (!projectId || !parseResult) return
+
+    setSavingEdit(true)
+    try {
+      const newComplexity = editingData.complexity || record.complexity
+      const newAssociationSystems = editingData.associationSystems || record.associationSystems
+
+      // 更新本地状态
+      const updatedModules = parseResult.modules.map((module) => ({
+        ...module,
+        functions: module.functions.map((func) => {
+          // 找到对应的功能点（通过名称匹配）
+          if (func.name === record.name) {
+            return {
+              ...func,
+              complexity: newComplexity,
+              complexityScore: getComplexityScore(newComplexity),
+              associationSystems: newAssociationSystems,
+              associationScore: getAssociationScore(newAssociationSystems),
+              processComplexity: getProcessComplexity(newComplexity),
+              techStackDifficulty: getTechStackDifficulty(newComplexity)
+            }
+          }
+          return func
+        })
+      }))
+
+      // 调用后端API更新
+      await estimateApi.updateParseResult(Number(projectId), {
+        modules: updatedModules.map(m => ({
+          name: m.name,
+          description: m.description,
+          functions: m.functions.map(f => ({
+            name: f.name,
+            complexity: f.complexity,
+            association_systems: f.associationSystems
+          }))
+        }))
+      })
+
+      setParseResult({ ...parseResult, modules: updatedModules })
+      setEditingKey(null)
+      setEditingData({})
+      message.success('修改已保存')
+    } catch {
+      message.error('保存失败')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   // 展开表格列配置（功能点明细）
   const functionColumns: ColumnsType<FunctionPoint> = [
     {
@@ -322,8 +386,29 @@ export default function CostEstimateParseResult() {
       title: '复杂度',
       dataIndex: 'complexity',
       key: 'complexity',
-      width: 100,
-      render: (value: string) => renderComplexityTag(value)
+      width: 140,
+      render: (value: string, record: FunctionPoint, index: number) => {
+        const key = `${record.name}-${index}`
+        const isEditing = editingKey === key
+
+        if (isEditing) {
+          return (
+            <Select
+              value={editingData.complexity || value}
+              onChange={(val) => setEditingData({ ...editingData, complexity: val })}
+              style={{ width: 110 }}
+              options={[
+                { value: 'very_basic', label: '较为基础' },
+                { value: 'basic', label: '基础' },
+                { value: 'medium', label: '中等' },
+                { value: 'complex', label: '复杂' },
+                { value: 'very_complex', label: '极复杂' }
+              ]}
+            />
+          )
+        }
+        return renderComplexityTag(value)
+      }
     },
     {
       title: '复杂度分值',
@@ -341,12 +426,28 @@ export default function CostEstimateParseResult() {
       title: '关联系统数',
       dataIndex: 'associationSystems',
       key: 'associationSystems',
-      width: 100,
-      render: (value: number) => (
-        <Tag style={{ borderRadius: 8, background: '#8B5CF615', color: '#8B5CF6', border: 'none' }}>
-          {value} 个
-        </Tag>
-      )
+      width: 120,
+      render: (value: number, record: FunctionPoint, index: number) => {
+        const key = `${record.name}-${index}`
+        const isEditing = editingKey === key
+
+        if (isEditing) {
+          return (
+            <InputNumber
+              min={1}
+              max={10}
+              value={editingData.associationSystems || value}
+              onChange={(val) => setEditingData({ ...editingData, associationSystems: val || 1 })}
+              style={{ width: 80 }}
+            />
+          )
+        }
+        return (
+          <Tag style={{ borderRadius: 8, background: '#8B5CF615', color: '#8B5CF6', border: 'none' }}>
+            {value} 个
+          </Tag>
+        )
+      }
     },
     {
       title: '关联度系数',
@@ -383,6 +484,54 @@ export default function CostEstimateParseResult() {
           <Text strong style={{ color: '#F59E0B' }}>{value.toFixed(2)}</Text>
         </div>
       )
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 100,
+      render: (_: any, record: FunctionPoint, index: number) => {
+        const key = `${record.name}-${index}`
+        const isEditing = editingKey === key
+
+        if (isEditing) {
+          return (
+            <Space size="small">
+              <Button
+                size="small"
+                type="primary"
+                icon={<SaveOutlined />}
+                loading={savingEdit}
+                onClick={() => handleSaveEdit(record, index)}
+                style={{ borderRadius: 6 }}
+              />
+              <Button
+                size="small"
+                icon={<CloseOutlined />}
+                onClick={() => {
+                  setEditingKey(null)
+                  setEditingData({})
+                }}
+                style={{ borderRadius: 6 }}
+              />
+            </Space>
+          )
+        }
+
+        return (
+          <Button
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => {
+              setEditingKey(key)
+              setEditingData({
+                complexity: record.complexity,
+                associationSystems: record.associationSystems
+              })
+            }}
+            style={{ borderRadius: 6 }}
+          />
+        )
+      }
     }
   ]
 
@@ -530,17 +679,6 @@ export default function CostEstimateParseResult() {
 
   return (
     <div className="page-container">
-      {/* 步骤条 */}
-      <Card
-        style={{
-          borderRadius: 20,
-          marginBottom: 32,
-          border: '1px solid var(--color-border-light)',
-        }}
-      >
-        <Steps current={currentStep} items={stepItems} />
-      </Card>
-
       {/* 功能介绍区域 */}
       <div
         style={{
@@ -576,6 +714,17 @@ export default function CostEstimateParseResult() {
           </div>
         </div>
       </div>
+
+      {/* 步骤条 */}
+      <Card
+        style={{
+          borderRadius: 20,
+          marginBottom: 32,
+          border: '1px solid var(--color-border-light)',
+        }}
+      >
+        <Steps current={currentStep} items={stepItems} />
+      </Card>
 
       {/* 维度说明 - 更大间距 */}
       <Row gutter={[20, 20]} style={{ marginBottom: 32 }}>

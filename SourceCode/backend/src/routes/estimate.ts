@@ -325,14 +325,46 @@ function mapComplexity(complexity: string): 'simple' | 'medium' | 'complex' {
  */
 router.get('/config/default', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const defaultConfig: EstimateConfigResponse = {
+    // 将对象格式转换为前端期望的数组格式
+    const complexityConfigArray = Object.entries(DEFAULT_COMPLEXITY_CONFIG).map(([key, value]) => ({
+      level: mapComplexityLabel(key),
+      workdays: value
+    }))
+
+    const systemCoefficientArray = [
+      { systemCount: 1, coefficient: 1.0 },
+      { systemCount: 2, coefficient: 1.5 },
+      { systemCount: 5, coefficient: 2.0 },
+      { systemCount: 6, coefficient: 3.0 }
+    ]
+
+    const processCoefficientArray = [
+      { stage: '需求分析', coefficient: 0.15 },
+      { stage: '系统设计', coefficient: 0.20 },
+      { stage: '开发实现', coefficient: 0.40 },
+      { stage: '测试验证', coefficient: 0.15 },
+      { stage: '部署上线', coefficient: 0.10 }
+    ]
+
+    const techStackCoefficientArray = [
+      { techType: '常规技术', coefficient: 1.0 },
+      { techType: '新技术应用', coefficient: 1.3 },
+      { techType: '复杂架构', coefficient: 1.5 }
+    ]
+
+    const unitPriceConfigArray = Object.entries(DEFAULT_DAILY_RATES).map(([key, value]) => ({
+      role: mapRoleLabel(key),
+      price: value
+    }))
+
+    const defaultConfig = {
       id: 0,
       projectId: 0,
-      complexityConfig: DEFAULT_COMPLEXITY_CONFIG as any,
-      systemCoefficient: { distributed: 1.2, microservice: 1.3, monomer: 1.0 },
-      processCoefficient: { agile: 1.1, waterfall: 1.0, hybrid: 1.05 },
-      techStackCoefficient: { java: 1.0, python: 0.9, nodejs: 0.95, dotnet: 1.0, go: 0.85 },
-      unitPriceConfig: DEFAULT_DAILY_RATES as any,
+      complexityConfig: complexityConfigArray,
+      systemCoefficientConfig: systemCoefficientArray,
+      processCoefficientConfig: processCoefficientArray,
+      techStackCoefficientConfig: techStackCoefficientArray,
+      unitPriceConfig: unitPriceConfigArray,
       managementCoefficient: DEFAULT_MANAGEMENT_COEFFICIENT
     }
 
@@ -342,6 +374,32 @@ router.get('/config/default', authMiddleware, async (req: Request, res: Response
     sendError(res, 500, '获取默认配置失败')
   }
 })
+
+// 复杂度key转中文标签
+function mapComplexityLabel(key: string): string {
+  const mapping: Record<string, string> = {
+    very_basic: '较为基础',
+    basic: '基础',
+    medium: '中等',
+    complex: '复杂',
+    very_complex: '极复杂'
+  }
+  return mapping[key] || key
+}
+
+// 角色key转中文标签
+function mapRoleLabel(key: string): string {
+  const mapping: Record<string, string> = {
+    product_manager: '产品经理',
+    ui_designer: 'UI设计师',
+    frontend_dev: '前端开发',
+    backend_dev: '后端开发',
+    func_tester: '功能测试',
+    perf_tester: '性能测试',
+    project_manager: '项目经理'
+  }
+  return mapping[key] || key
+}
 
 /**
  * GET /:projectId/config - 获取项目已保存的配置
@@ -729,6 +787,64 @@ router.get('/:projectId/parse-result', authMiddleware, async (req: Request, res:
   } catch (error) {
     console.error('Get parse result error:', error)
     sendError(res, 500, '获取解析结果失败')
+  }
+})
+
+/**
+ * PUT /:projectId/parse-result - 更新解析结果（功能点编辑）
+ */
+router.put('/:projectId/parse-result', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest
+    const { projectId } = req.params
+    const userId = authReq.userId
+    const { modules } = req.body
+
+    if (!await verifyProjectOwnership(Number(projectId), userId)) {
+      return sendError(res, 403, '无权访问该项目')
+    }
+
+    const document = await prisma.projectDocument.findFirst({
+      where: { projectId: Number(projectId) }
+    })
+
+    if (!document) {
+      return sendError(res, 404, '未找到项目文档')
+    }
+
+    // 获取现有解析结果
+    const existingResult: ParseResult = document.parseResult ? JSON.parse(document.parseResult) : { modules: [], totalModules: 0 }
+
+    // 更新模块数据
+    const updatedModules: ModuleInfo[] = modules.map((m: any) => {
+      const existingModule = existingResult.modules.find((em: any) => em.name === m.name)
+      return {
+        name: m.name,
+        description: m.description || existingModule?.description || '',
+        features: m.functions.map((f: any) => f.name),
+        complexity: m.functions.length > 0 ? mapComplexity(m.functions[0].complexity) : 'medium',
+        associationSystems: m.functions.length > 0 ? m.functions[0].association_systems || 1 : 1
+      }
+    })
+
+    const updatedParseResult: ParseResult = {
+      ...existingResult,
+      modules: updatedModules,
+      totalModules: updatedModules.length
+    }
+
+    // 更新数据库
+    await prisma.projectDocument.update({
+      where: { id: document.id },
+      data: {
+        parseResult: JSON.stringify(updatedParseResult)
+      }
+    })
+
+    sendResponse(res, { parseResult: updatedParseResult }, '解析结果更新成功')
+  } catch (error) {
+    console.error('Update parse result error:', error)
+    sendError(res, 500, '更新解析结果失败')
   }
 })
 

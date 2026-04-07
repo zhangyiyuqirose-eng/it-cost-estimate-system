@@ -747,17 +747,6 @@ export default function CostEstimateResult() {
   if (!projectId) {
     return (
       <div className="page-container">
-        {/* 步骤条 */}
-        <Card
-          style={{
-            borderRadius: 20,
-            marginBottom: 32,
-            border: '1px solid var(--color-border-light)',
-          }}
-        >
-          <Steps current={currentStep} items={stepItems} />
-        </Card>
-
         {/* 功能介绍区域 */}
         <div
           style={{
@@ -791,6 +780,17 @@ export default function CostEstimateResult() {
             </div>
           </div>
         </div>
+
+        {/* 步骤条 */}
+        <Card
+          style={{
+            borderRadius: 20,
+            marginBottom: 32,
+            border: '1px solid var(--color-border-light)',
+          }}
+        >
+          <Steps current={currentStep} items={stepItems} />
+        </Card>
 
         {/* 统计概览 */}
         <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
@@ -916,17 +916,6 @@ export default function CostEstimateResult() {
 
   return (
     <div className="page-container">
-      {/* 步骤条 */}
-      <Card
-        style={{
-          borderRadius: 20,
-          marginBottom: 32,
-          border: '1px solid var(--color-border-light)',
-        }}
-      >
-        <Steps current={currentStep} items={stepItems} />
-      </Card>
-
       {/* 功能介绍区域 */}
       <div
         style={{
@@ -962,6 +951,17 @@ export default function CostEstimateResult() {
           </div>
         </div>
       </div>
+
+      {/* 步骤条 */}
+      <Card
+        style={{
+          borderRadius: 20,
+          marginBottom: 32,
+          border: '1px solid var(--color-border-light)',
+        }}
+      >
+        <Steps current={currentStep} items={stepItems} />
+      </Card>
 
       {/* 核心指标卡片 */}
       <Row gutter={[20, 20]} style={{ marginBottom: 32 }}>

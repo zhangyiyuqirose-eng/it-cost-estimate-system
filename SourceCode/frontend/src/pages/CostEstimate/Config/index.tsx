@@ -149,37 +149,51 @@ export default function CostEstimateConfig() {
   const loadConfig = async () => {
     setLoading(true)
     try {
-      // 先尝试获取已保存的配置
-      const response = await estimateApi.getConfig(Number(projectId))
-      if (response.data.code === 0 || response.data.code === 200) {
-        const config: EstimateConfig = response.data.data
-        if (config) {
-          setComplexityConfig(Array.isArray(config.complexityConfig) ? config.complexityConfig : [])
-          setSystemCoefficientConfig(Array.isArray(config.systemCoefficientConfig) ? config.systemCoefficientConfig : [])
-          setProcessCoefficientConfig(Array.isArray(config.processCoefficientConfig) ? config.processCoefficientConfig : [])
-          setTechStackCoefficientConfig(Array.isArray(config.techStackCoefficientConfig) ? config.techStackCoefficientConfig : [])
-          setUnitPriceConfig(Array.isArray(config.unitPriceConfig) ? config.unitPriceConfig : [])
-          setManagementCoefficient(config.managementCoefficient || 0.15)
+      // 先加载默认配置作为基础
+      const defaultResponse = await estimateApi.getDefaultConfig()
+      if (defaultResponse.data.code === 0 || defaultResponse.data.code === 200) {
+        const defaultConfig: EstimateConfig = defaultResponse.data.data
+        if (defaultConfig) {
+          setComplexityConfig(Array.isArray(defaultConfig.complexityConfig) ? defaultConfig.complexityConfig : [])
+          setSystemCoefficientConfig(Array.isArray(defaultConfig.systemCoefficientConfig) ? defaultConfig.systemCoefficientConfig : [])
+          setProcessCoefficientConfig(Array.isArray(defaultConfig.processCoefficientConfig) ? defaultConfig.processCoefficientConfig : [])
+          setTechStackCoefficientConfig(Array.isArray(defaultConfig.techStackCoefficientConfig) ? defaultConfig.techStackCoefficientConfig : [])
+          setUnitPriceConfig(Array.isArray(defaultConfig.unitPriceConfig) ? defaultConfig.unitPriceConfig : [])
+          setManagementCoefficient(defaultConfig.managementCoefficient || 0.15)
         }
       }
-    } catch {
-      // 如果没有配置，加载默认配置
+
+      // 然后尝试获取已保存的配置来覆盖默认值
       try {
-        const defaultResponse = await estimateApi.getDefaultConfig()
-        if (defaultResponse.data.code === 0 || defaultResponse.data.code === 200) {
-          const config: EstimateConfig = defaultResponse.data.data
-          if (config) {
-            setComplexityConfig(Array.isArray(config.complexityConfig) ? config.complexityConfig : [])
-            setSystemCoefficientConfig(Array.isArray(config.systemCoefficientConfig) ? config.systemCoefficientConfig : [])
-            setProcessCoefficientConfig(Array.isArray(config.processCoefficientConfig) ? config.processCoefficientConfig : [])
-            setTechStackCoefficientConfig(Array.isArray(config.techStackCoefficientConfig) ? config.techStackCoefficientConfig : [])
-            setUnitPriceConfig(Array.isArray(config.unitPriceConfig) ? config.unitPriceConfig : [])
-            setManagementCoefficient(config.managementCoefficient || 0.15)
+        const response = await estimateApi.getConfig(Number(projectId))
+        if (response.data.code === 0 || response.data.code === 200) {
+          const savedConfig: EstimateConfig = response.data.data
+          if (savedConfig) {
+            if (Array.isArray(savedConfig.complexityConfig) && savedConfig.complexityConfig.length > 0) {
+              setComplexityConfig(savedConfig.complexityConfig)
+            }
+            if (Array.isArray(savedConfig.systemCoefficientConfig) && savedConfig.systemCoefficientConfig.length > 0) {
+              setSystemCoefficientConfig(savedConfig.systemCoefficientConfig)
+            }
+            if (Array.isArray(savedConfig.processCoefficientConfig) && savedConfig.processCoefficientConfig.length > 0) {
+              setProcessCoefficientConfig(savedConfig.processCoefficientConfig)
+            }
+            if (Array.isArray(savedConfig.techStackCoefficientConfig) && savedConfig.techStackCoefficientConfig.length > 0) {
+              setTechStackCoefficientConfig(savedConfig.techStackCoefficientConfig)
+            }
+            if (Array.isArray(savedConfig.unitPriceConfig) && savedConfig.unitPriceConfig.length > 0) {
+              setUnitPriceConfig(savedConfig.unitPriceConfig)
+            }
+            if (savedConfig.managementCoefficient) {
+              setManagementCoefficient(savedConfig.managementCoefficient)
+            }
           }
         }
       } catch {
-        message.info('使用默认配置')
+        // 没有保存的配置，使用默认配置即可
       }
+    } catch {
+      message.error('加载默认配置失败')
     } finally {
       setLoading(false)
     }

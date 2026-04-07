@@ -361,7 +361,8 @@ router.get('/:projectId/config', authMiddleware, async (req: Request, res: Respo
     })
 
     if (!config) {
-      return sendError(res, 404, '该项目尚未保存配置')
+      // 没有保存的配置时返回null，而不是404错误
+      return sendResponse(res, null, '该项目尚未保存配置')
     }
 
     const response: EstimateConfigResponse = {

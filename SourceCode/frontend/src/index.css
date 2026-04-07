@@ -140,12 +140,12 @@ body {
 }
 
 /* ===========================================
- * 页面容器 - 紧凑清爽
+ * 页面容器 - 大幅留白与呼吸感
  * =========================================== */
 
 .page-container {
-  padding: var(--spacing-6) var(--spacing-4);
-  max-width: 1280px;
+  padding: 40px 48px;
+  max-width: 1200px;
   margin: 0 auto;
   animation: fadeIn 0.4s ease-out;
 }
@@ -736,7 +736,7 @@ body {
 
 @media (max-width: 768px) {
   .page-container {
-    padding: var(--spacing-4);
+    padding: 24px 20px;
   }
 
   .ant-card-body {
@@ -750,7 +750,7 @@ body {
 
 @media (max-width: 576px) {
   .page-container {
-    padding: var(--spacing-3);
+    padding: 16px 12px;
   }
 
   .ant-btn {
@@ -771,7 +771,7 @@ body {
   }
 
   .page-container {
-    padding: 0;
+    padding: 20px;
   }
 
   .ant-card {

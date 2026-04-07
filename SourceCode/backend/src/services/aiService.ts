@@ -465,6 +465,97 @@ ${data.teamCosts.map(t => `- ${t.team}: 预期${t.expected}万, 实际${t.actual
       return false
     }
   }
+
+  /**
+   * 生成工作项描述
+   * 根据需求文档内容，为每个阶段的功能点生成具体的工作项描述
+   */
+  async generateWorkItemDescriptions(params: {
+    documentText: string
+    projectName: string
+    modules: { name: string; functions: string[] }[]
+    phases: string[]
+  }): Promise<Record<string, Record<string, string>>> {
+    const { documentText, projectName, modules, phases } = params
+
+    // 构建功能点列表
+    const functionList: string[] = []
+    for (const module of modules) {
+      for (const func of module.functions) {
+        functionList.push(`${module.name} - ${func}`)
+      }
+    }
+
+    const prompt = `你是一个专业的软件项目工作量评估专家。请根据以下需求文档内容，为每个阶段的功能点生成具体的工作项描述。
+
+项目名称：${projectName}
+
+需求文档内容（摘要）：
+${documentText.substring(0, 8000)}
+
+需要生成描述的阶段：
+${phases.join('、')}
+
+功能点列表：
+${functionList.map((f, i) => `${i + 1}. ${f}`).join('\n')}
+
+要求：
+1. 每个工作项描述必须结合需求文档中的实际内容，具体说明要做什么工作
+2. 描述长度控制在30-100个字
+3. 不同阶段的描述应体现该阶段的工作特点：
+   - 需求：调研、分析、评审相关工作
+   - UI设计：交互设计、视觉设计、评审相关工作
+   - 技术设计：架构设计、数据模型设计、接口设计相关工作
+   - 开发：编码、代码审查、单元测试相关工作
+   - 技术测试：测试方案、测试执行、缺陷跟踪相关工作
+   - 性能测试：性能方案、压力测试、优化分析相关工作
+4. 描述要具体，不能泛泛而谈
+
+请以JSON格式返回，格式如下：
+{
+  "需求": {
+    "模块名 - 功能名": "具体工作项描述",
+    ...
+  },
+  "UI设计": {
+    ...
+  },
+  ...
+}
+
+只返回JSON，不要返回其他内容。`
+
+    const systemPrompt = '你是一个专业的软件项目工作量评估专家。请只返回JSON格式结果，确保每个描述都在30-100字之间，并且结合需求文档的具体内容。'
+
+    console.log(`[AI Service] 开始生成工作项描述，功能点数: ${functionList.length}`)
+
+    try {
+      const text = await this.chat(
+        [{ role: 'user', content: prompt }],
+        systemPrompt
+      )
+
+      if (!text) {
+        throw new Error('AI模型返回为空')
+      }
+
+      // 解析 JSON
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        console.error('[AI Service] JSON 解析失败:', text.substring(0, 200))
+        throw new Error('AI返回无法解析为JSON')
+      }
+
+      const result: Record<string, Record<string, string>> = JSON.parse(jsonMatch[0])
+      console.log(`[AI Service] 工作项描述生成成功，阶段数: ${Object.keys(result).length}`)
+
+      return result
+    } catch (error) {
+      console.error('[AI Service] 生成工作项描述失败:', error)
+      // 返回空对象，后续会使用默认描述
+      return {}
+    }
+  }
 }
 
 // 导出单例

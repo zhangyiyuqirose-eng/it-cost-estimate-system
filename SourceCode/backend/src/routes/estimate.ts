@@ -1019,6 +1019,7 @@ function validateCompliance(stageDetail: StageDetail[], totalDays: number): {
 
 /**
  * 生成Excel报告（参考Python实现）
+ * @param workItemDescriptions AI生成的阶段-功能工作项描述映射
  */
 async function generateExcelReport(
   project: { projectName: string },
@@ -1032,7 +1033,8 @@ async function generateExcelReport(
     calcTrace: CalcTraceItem[]
   },
   document: { parseResult: string },
-  config: { complexityConfig: string | null; unitPriceConfig: string | null; managementCoefficient: number } | null
+  config: { complexityConfig: string | null; unitPriceConfig: string | null; managementCoefficient: number } | null,
+  workItemDescriptions?: Record<string, Record<string, string>>
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'IT项目成本估算系统'
@@ -1257,10 +1259,12 @@ async function generateExcelReport(
         funcCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }
         funcCell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
 
-        // 工作项描述
+        // 工作项描述 - 优先使用AI生成的描述
         ws2.mergeCells(`F${row}:K${row}`)
         const descCell = ws2.getCell(`F${row}`)
-        descCell.value = PHASE_DESC[phaseName] || ''
+        // 获取AI生成的描述：格式为 "模块名 - 功能名"
+        const aiDesc = workItemDescriptions?.[phaseName]?.[`${moduleName} - ${item.function}`]
+        descCell.value = aiDesc || PHASE_DESC[phaseName] || ''
         descCell.font = { name: 'Arial', size: 9 }
         descCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
         descCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }
@@ -1710,17 +1714,65 @@ router.get('/:projectId/export', authMiddleware, async (req: Request, res: Respo
       return sendError(res, 404, '未找到文档解析结果')
     }
 
-    // 解析文档结果获取项目名称
+    // 解析文档结果获取项目名称和模块信息
     let projectName = project.projectName
     let systemName = ''
+    let modules: any[] = []
     try {
       const parseResult: ParseResult = JSON.parse(document.parseResult)
       if (parseResult.projectName) {
         projectName = parseResult.projectName
       }
       systemName = parseResult.systemName || ''
+      modules = parseResult.modules || []
     } catch (e) {
       // ignore
+    }
+
+    // 调用AI生成工作项描述
+    let workItemDescriptions: Record<string, Record<string, string>> = {}
+    try {
+      // 读取原始文档内容
+      const filePath = path.join(uploadDir, document.docPath || '')
+      let documentText = ''
+      try {
+        const text = await parseDocumentContent(filePath)
+        documentText = text
+      } catch (e) {
+        // 如果无法读取文档，使用parseResult中的rawText
+        console.log('[Export] 无法读取原始文档，使用parseResult中的rawText')
+        try {
+          const parseResult: ParseResult = JSON.parse(document.parseResult)
+          documentText = parseResult.rawText || ''
+        } catch (e2) {
+          documentText = ''
+        }
+      }
+
+      if (documentText && modules.length > 0) {
+        // 构建模块数据格式
+        const modulesForAI = modules.map(m => ({
+          name: m.name,
+          functions: m.features || [m.name]
+        }))
+
+        // 获取阶段列表
+        const phases = PHASES.map(p => p.name)
+
+        console.log(`[Export] 开始调用AI生成工作项描述，模块数: ${modulesForAI.length}, 文档长度: ${documentText.length}`)
+
+        workItemDescriptions = await aiService.generateWorkItemDescriptions({
+          documentText,
+          projectName,
+          modules: modulesForAI,
+          phases
+        })
+
+        console.log(`[Export] AI生成工作项描述完成，阶段数: ${Object.keys(workItemDescriptions).length}`)
+      }
+    } catch (e) {
+      console.error('[Export] AI生成工作项描述失败，使用默认描述:', e)
+      // 失败时使用空对象，generateExcelReport会使用默认PHASE_DESC
     }
 
     const stageDetail: StageDetail[] = JSON.parse(result.stageDetail || '[]')
@@ -1746,7 +1798,8 @@ router.get('/:projectId/export', authMiddleware, async (req: Request, res: Respo
         complexityConfig: config.complexityConfig,
         unitPriceConfig: config.unitPriceConfig,
         managementCoefficient: config.managementCoefficient
-      } : null
+      } : null,
+      workItemDescriptions
     )
 
     // 更新项目信息（项目名称、合同金额等）

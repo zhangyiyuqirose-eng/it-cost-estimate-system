@@ -28,8 +28,6 @@ import {
   ExclamationCircleOutlined,
   ArrowLeftOutlined,
   RocketOutlined,
-  RiseOutlined,
-  TeamOutlined,
   DashboardOutlined,
   ThunderboltOutlined,
   PlusOutlined,
@@ -83,69 +81,40 @@ interface ProjectListItem {
   estimateConfigs: Array<{ id: number }>
 }
 
-// 统计卡片组件 - 简约现代风格
-interface StatCardProps {
+// KPI卡片配置
+interface KPICardProps {
   title: string
-  value: number | string
-  suffix?: string
+  value: number
+  unit: string
   precision?: number
-  icon: React.ReactNode
-  color: string
-  gradient: string
+  bgColor: string
+  borderColor: string
 }
 
-function StatCard({ title, value, suffix, precision, icon, color, gradient }: StatCardProps) {
+function KPICard({ title, value, unit, precision = 2, bgColor, borderColor }: KPICardProps) {
   return (
-    <Card
+    <div
       style={{
-        borderRadius: 20,
-        border: '1px solid var(--color-border-light)',
+        background: bgColor,
+        borderRadius: 12,
+        padding: '20px 24px',
+        border: `1px solid ${borderColor}`,
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
         height: '100%',
-        overflow: 'hidden',
       }}
     >
-      <div
-        style={{
-          background: gradient,
-          padding: '28px 24px',
-          borderRadius: 16,
-          marginBottom: 20,
-        }}
-      >
-        <div
-          style={{
-            width: 52,
-            height: 52,
-            borderRadius: 14,
-            background: 'rgba(255, 255, 255, 0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 14,
-          }}
-        >
-          <span style={{ fontSize: 26, color: '#fff' }}>{icon}</span>
-        </div>
-        <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 13 }}>{title}</Text>
+      <div style={{ marginBottom: 8 }}>
+        <Text style={{ fontSize: 14, color: '#64748B' }}>{title}</Text>
       </div>
-      <div style={{ textAlign: 'center' }}>
-        <Text
-          strong
-          style={{
-            fontSize: 34,
-            color,
-            fontWeight: 700,
-          }}
-        >
-          {typeof value === 'number' && precision ? value.toFixed(precision) : value}
+      <div style={{ marginBottom: 4 }}>
+        <Text strong style={{ fontSize: 32, color: '#1E293B' }}>
+          {precision ? value.toFixed(precision) : value}
         </Text>
-        {suffix && (
-          <Text type="secondary" style={{ fontSize: 14, marginLeft: 6 }}>
-            {suffix}
-          </Text>
-        )}
       </div>
-    </Card>
+      <div>
+        <Text style={{ fontSize: 13, color: '#64748B' }}>{unit}</Text>
+      </div>
+    </div>
   )
 }
 
@@ -345,7 +314,7 @@ export default function CostEstimateResult() {
     }
   }
 
-  // 团队工作量饼图配置 - 现代专业设计
+  // 团队工作量饼图配置 - 环形饼图
   const teamPieConfig = {
     appendPadding: [20, 20, 20, 20],
     data: result?.teamBreakdown?.map((item) => ({
@@ -355,10 +324,23 @@ export default function CostEstimateResult() {
     angleField: 'value',
     colorField: 'type',
     radius: 0.85,
-    innerRadius: 0.65,
-    // 现代渐变色方案
-    color: ['#667EEA', '#764BA2', '#F093FB', '#F5576C', '#4FACFE', '#00F2FE'],
-    // 外部标签带引导线
+    innerRadius: 0.6,
+    // 指定配色
+    color: (datum: any) => {
+      const colorMap: Record<string, string> = {
+        '产品团队': '#3B82F6',
+        '产品': '#3B82F6',
+        'UI团队': '#A78BFA',
+        'UI': '#A78BFA',
+        '研发团队': '#34D399',
+        '研发': '#34D399',
+        '测试团队': '#FB923C',
+        '测试': '#FB923C',
+        '项目管理': '#F472B6',
+        'PM': '#F472B6',
+      }
+      return colorMap[datum.type] || '#94A3B8'
+    },
     label: {
       type: 'spider' as const,
       formatter: (datum: any) => {
@@ -371,14 +353,7 @@ export default function CostEstimateResult() {
         fill: '#374151',
         fontWeight: 500,
       },
-      labelLine: {
-        style: {
-          stroke: '#9CA3AF',
-          lineWidth: 1,
-        },
-      },
     },
-    // 右侧图例
     legend: {
       position: 'right' as const,
       layout: 'vertical' as const,
@@ -405,15 +380,13 @@ export default function CostEstimateResult() {
     interactions: [
       { type: 'element-selected' },
       { type: 'element-active' },
-      { type: 'pie-statistic-active' },
     ],
-    // 中心统计信息
     statistic: {
       title: {
-        offsetY: -12,
+        offsetY: -8,
         style: {
           fontSize: '13px',
-          color: '#6B7280',
+          color: '#64748B',
           fontWeight: 400,
         },
         customHtml: () => '总工作量',
@@ -421,29 +394,28 @@ export default function CostEstimateResult() {
       content: {
         offsetY: 8,
         style: {
-          fontSize: '28px',
-          color: '#1F2937',
+          fontSize: '24px',
+          color: '#1E293B',
           fontWeight: 700,
         },
-        customHtml: () => `${result?.totalManDay?.toFixed(1) || '0'}<span style="font-size:14px;color:#6B7280;font-weight:400"> 人天</span>`,
+        customHtml: () => `${result?.totalManDay?.toFixed(1) || '0'}<span style="font-size:13px;color:#64748B;font-weight:400"> 人天</span>`,
       },
     },
-    // 悬浮状态样式
     state: {
       active: {
         style: (_element: any) => {
           return {
-            lineWidth: 3,
+            lineWidth: 2,
             stroke: '#fff',
-            shadowBlur: 12,
-            shadowColor: 'rgba(0, 0, 0, 0.15)',
+            shadowBlur: 8,
+            shadowColor: 'rgba(0, 0, 0, 0.1)',
           }
         },
       },
     },
   }
 
-  // 各阶段工作量柱状图配置
+  // 各阶段工作量柱状图配置 - 分组柱状图
   const stageColumnConfig = {
     data: result?.stageBreakdown?.map((item) => ({
       stage: item.stage,
@@ -452,20 +424,59 @@ export default function CostEstimateResult() {
     })) || [],
     xField: 'stage',
     yField: 'workdays',
-    color: '#3B82F6',
+    // 各阶段配色
+    color: (datum: any) => {
+      const colorMap: Record<string, string> = {
+        '需求': '#3B82F6',
+        'UI设计': '#A78BFA',
+        '技术设计': '#60A5FA',
+        '开发': '#34D399',
+        '技术测试': '#FB923C',
+        '性能测试': '#94A3B8',
+        '投产上线': '#FBBF24',
+      }
+      return colorMap[datum.stage] || '#3B82F6'
+    },
     label: {
       position: 'top' as const,
       style: {
-        fill: '#1D2129',
+        fill: '#1E293B',
         fontSize: 12,
+        fontWeight: 500,
       },
+      formatter: (datum: any) => `${datum.workdays.toFixed(1)}`,
     },
     meta: {
       stage: { alias: '阶段' },
       workdays: { alias: '人天' },
     },
     columnStyle: {
-      radius: [8, 8, 0, 0],
+      radius: [6, 6, 0, 0],
+    },
+    yAxis: {
+      grid: {
+        line: {
+          style: {
+            stroke: '#E2E8F0',
+            lineWidth: 1,
+          },
+        },
+      },
+      label: {
+        style: {
+          fill: '#64748B',
+          fontSize: 12,
+        },
+      },
+    },
+    xAxis: {
+      label: {
+        style: {
+          fill: '#374151',
+          fontSize: 12,
+        },
+        autoRotate: true,
+      },
     },
   }
 
@@ -915,7 +926,7 @@ export default function CostEstimateResult() {
   }
 
   return (
-    <div className="page-container">
+    <div className="page-container" style={{ background: '#F8FAFC', minHeight: '100vh' }}>
       {/* 功能介绍区域 */}
       <div
         style={{
@@ -963,49 +974,46 @@ export default function CostEstimateResult() {
         <Steps current={currentStep} items={stepItems} />
       </Card>
 
-      {/* 核心指标卡片 */}
-      <Row gutter={[20, 20]} style={{ marginBottom: 32 }}>
+      {/* 核心指标卡片 - KPI风格 */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
         <Col xs={12} sm={6}>
-          <StatCard
-            title="总人天"
+          <KPICard
+            title="总工作量"
             value={result.totalManDay}
-            suffix="天"
-            precision={1}
-            icon={<TeamOutlined />}
-            color="#3B82F6"
-            gradient="linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)"
-          />
-        </Col>
-        <Col xs={12} sm={6}>
-          <StatCard
-            title="总成本"
-            value={result.totalCost}
-            suffix="元"
+            unit="人天"
             precision={2}
-            icon={<RiseOutlined />}
-            color="#EF4444"
-            gradient="linear-gradient(135deg, #EF4444 0%, #F87171 100%)"
+            bgColor="#EFF6FF"
+            borderColor="#DBEAFE"
           />
         </Col>
         <Col xs={12} sm={6}>
-          <StatCard
-            title="功能模块"
-            value={result.moduleCount}
-            suffix="个"
-            icon={<DashboardOutlined />}
-            color="#10B981"
-            gradient="linear-gradient(135deg, #10B981 0%, #34D399 100%)"
-          />
-        </Col>
-        <Col xs={12} sm={6}>
-          <StatCard
-            title="人月"
+          <KPICard
+            title="人月折算"
             value={result.manMonth}
-            suffix="月"
-            precision={1}
-            icon={<ThunderboltOutlined />}
-            color="#F59E0B"
-            gradient="linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)"
+            unit="人月"
+            precision={2}
+            bgColor="#ECFDF5"
+            borderColor="#D1FAE5"
+          />
+        </Col>
+        <Col xs={12} sm={6}>
+          <KPICard
+            title="预估总成本"
+            value={result.totalCost / 10000}
+            unit="万元"
+            precision={2}
+            bgColor="#FFF7ED"
+            borderColor="#FFEDD5"
+          />
+        </Col>
+        <Col xs={12} sm={6}>
+          <KPICard
+            title="功能模块数"
+            value={result.moduleCount}
+            unit="个模块"
+            precision={0}
+            bgColor="#FAF5FF"
+            borderColor="#F3E8FF"
           />
         </Col>
       </Row>
@@ -1013,9 +1021,11 @@ export default function CostEstimateResult() {
       {/* Tab切换 */}
       <Card
         style={{
-          borderRadius: 24,
-          border: '1px solid var(--color-border-light)',
+          borderRadius: 12,
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
         }}
+        bodyStyle={{ padding: '16px 24px' }}
       >
         <Tabs
           activeKey={activeTab}
@@ -1027,17 +1037,22 @@ export default function CostEstimateResult() {
               icon: <DashboardOutlined />,
               children: (
                 <div>
-                  {/* 图表区域 */}
-                  <Row gutter={[24, 24]}>
+                  {/* 图表区域 - 左右分栏 */}
+                  <Row gutter={16}>
                     <Col xs={24} lg={12}>
                       <Card
                         title={
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <TeamOutlined style={{ color: '#3B82F6' }} />
-                            <Text strong>团队工作量分布</Text>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Text strong style={{ fontSize: 15, color: '#1E293B' }}>团队工作量分布</Text>
                           </div>
                         }
-                        style={{ borderRadius: 18, border: '1px solid var(--color-border-light)' }}
+                        style={{
+                          borderRadius: 12,
+                          border: '1px solid #E2E8F0',
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                          height: '100%',
+                        }}
+                        bodyStyle={{ padding: '16px 20px' }}
                       >
                         <Pie {...teamPieConfig} />
                       </Card>
@@ -1045,12 +1060,17 @@ export default function CostEstimateResult() {
                     <Col xs={24} lg={12}>
                       <Card
                         title={
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <BarChartOutlined style={{ color: '#8B5CF6' }} />
-                            <Text strong>各阶段工作量</Text>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Text strong style={{ fontSize: 15, color: '#1E293B' }}>各阶段工作量</Text>
                           </div>
                         }
-                        style={{ borderRadius: 18, border: '1px solid var(--color-border-light)' }}
+                        style={{
+                          borderRadius: 12,
+                          border: '1px solid #E2E8F0',
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                          height: '100%',
+                        }}
+                        bodyStyle={{ padding: '16px 20px' }}
                       >
                         <Column {...stageColumnConfig} />
                       </Card>

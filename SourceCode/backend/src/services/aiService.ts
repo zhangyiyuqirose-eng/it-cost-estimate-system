@@ -81,7 +81,9 @@ class AIService {
   private apiKey: string
   private model: string
 
-  // OCR多模态模型配置（用于成本消耗、偏差监控的图像识别）
+  // OCR服务配置
+  private ocrProvider: string // 'paddleocr' | 'finna'
+  private paddleOcrUrl: string
   private ocrApiUrl: string
   private ocrApiKey: string
   private ocrModel: string
@@ -92,12 +94,14 @@ class AIService {
     this.apiKey = process.env.AI_API_KEY || 'app-PvoiFWuSXcN4kwCBuplgOnnC'
     this.model = process.env.AI_MODEL || 'qwq-32b'
 
-    // OCR多模态模型配置 - tencent/Hunyuan-MT-7B（支持图像识别）
+    // OCR 服务配置
+    this.ocrProvider = process.env.OCR_PROVIDER || 'paddleocr'
+    this.paddleOcrUrl = process.env.PADDLEOCR_URL || 'http://localhost:8868/ocr/structured'
     this.ocrApiUrl = process.env.OCR_API_URL || 'https://www.finna.com.cn/v1/chat/completions'
     this.ocrApiKey = process.env.OCR_API_KEY || 'app-VQZKrtvW81qy8fvLuDl6Gxbq'
     this.ocrModel = process.env.OCR_MODEL || 'tencent/Hunyuan-MT-7B'
 
-    console.log(`[AI Service] 文本推理模型: ${this.model}, OCR模型: ${this.ocrModel}`)
+    console.log(`[AI Service] 文本推理模型: ${this.model}, OCR服务: ${this.ocrProvider}`)
   }
 
   /**
@@ -286,12 +290,69 @@ ${documentText.substring(0, 12000)}`
   }
 
   /**
-   * OCR识别OA截图（使用 Qwen/Qwen3-Omni-30B-A3B-Thinking 多模态模型）
+   * OCR识别OA截图
+   * 支持本地 PaddleOCR 服务和云端 Finna API
    * 用于成本消耗预估模块
    */
   async recognizeOCR(imageBase64: string): Promise<OCRResult> {
-    console.log(`[AI Service] 开始OCR识别，使用模型: ${this.ocrModel}`)
+    console.log(`[AI Service] 开始OCR识别，服务: ${this.ocrProvider}`)
 
+    // 使用本地 PaddleOCR 服务
+    if (this.ocrProvider === 'paddleocr') {
+      return await this.recognizeWithPaddleOCR(imageBase64, 'consumption')
+    }
+
+    // 使用云端 Finna API
+    return await this.recognizeWithFinna(imageBase64)
+  }
+
+  /**
+   * 使用本地 PaddleOCR 服务识别
+   */
+  private async recognizeWithPaddleOCR(
+    imageBase64: string,
+    extractType: 'consumption' | 'deviation'
+  ): Promise<OCRResult> {
+    try {
+      const response = await axios.post(
+        this.paddleOcrUrl,
+        {
+          image: imageBase64,
+          extract_type: extractType
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 120000
+        }
+      )
+
+      if (response.data.code === 200 && response.data.data) {
+        console.log(`[AI Service] PaddleOCR 识别成功`)
+        return response.data.data
+      } else {
+        console.error('[AI Service] PaddleOCR 返回错误:', response.data)
+      }
+    } catch (error: any) {
+      console.error('[AI Service] PaddleOCR 调用失败:', error?.message)
+    }
+
+    // 返回默认值
+    return {
+      contractAmount: 0,
+      preSaleRatio: 0,
+      taxRate: 0.06,
+      externalLaborCost: 0,
+      externalSoftwareCost: 0,
+      currentManpowerCost: 0
+    }
+  }
+
+  /**
+   * 使用云端 Finna API 识别（备用）
+   */
+  private async recognizeWithFinna(imageBase64: string): Promise<OCRResult> {
     const systemPrompt = `你是一个专业的财务数据分析师。请分析用户提供的OA系统截图，提取以下财务信息：
 1. 合同金额（万元）
 2. 售前比例（小数，如0.15表示15%）
@@ -319,7 +380,7 @@ ${documentText.substring(0, 12000)}`
         this.ocrApiUrl,
         {
           model: this.ocrModel,
-          temperature: 0.3, // 降低温度提高识别准确性
+          temperature: 0.3,
           stream: false,
           messages: [
             { role: 'system', content: systemPrompt },
@@ -337,28 +398,27 @@ ${documentText.substring(0, 12000)}`
             'Authorization': `Bearer ${this.ocrApiKey}`,
             'Content-Type': 'application/json; charset=utf-8'
           },
-          timeout: 120000 // OCR需要更长超时
+          timeout: 120000
         }
       )
 
       if (response.data.choices && response.data.choices.length > 0) {
         const text = response.data.choices[0].message.content
-        console.log(`[AI Service] OCR识别返回内容长度: ${text.length}`)
+        console.log(`[AI Service] Finna OCR识别返回内容长度: ${text.length}`)
 
         const jsonMatch = text.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
           const result = JSON.parse(jsonMatch[0])
-          console.log(`[AI Service] OCR识别成功:`, JSON.stringify(result))
+          console.log(`[AI Service] Finna OCR识别成功:`, JSON.stringify(result))
           return result
         } else {
-          console.error('[AI Service] OCR返回内容无法解析为JSON:', text.substring(0, 500))
+          console.error('[AI Service] Finna OCR返回内容无法解析为JSON:', text.substring(0, 500))
         }
       }
     } catch (error: any) {
-      console.error('[AI Service] OCR识别错误:', error?.response?.data || error?.message)
+      console.error('[AI Service] Finna OCR识别错误:', error?.response?.data || error?.message)
     }
 
-    // 返回默认值
     return {
       contractAmount: 0,
       preSaleRatio: 0,
@@ -409,14 +469,81 @@ ${data.teamCosts.map(t => `- ${t.team}: 预期${t.expected}万, 实际${t.actual
   }
 
   /**
-   * 识别项目偏差截图（使用 Qwen/Qwen3-Omni-30B-A3B-Thinking 多模态模型）
+   * 识别项目偏差截图
+   * 支持本地 PaddleOCR 服务和云端 Finna API
    * 用于偏差监控模块
    */
   async recognizeProjectScreenshots(
     screenshots: { type: string; base64: string }[]
   ): Promise<DeviationAnalysisResult> {
-    console.log(`[AI Service] 开始偏差截图识别，截图数量: ${screenshots.length}, 使用模型: ${this.ocrModel}`)
+    console.log(`[AI Service] 开始偏差截图识别，截图数量: ${screenshots.length}, 服务: ${this.ocrProvider}`)
 
+    // 使用本地 PaddleOCR 服务
+    if (this.ocrProvider === 'paddleocr') {
+      return await this.recognizeScreenshotsWithPaddleOCR(screenshots)
+    }
+
+    // 使用云端 Finna API
+    return await this.recognizeScreenshotsWithFinna(screenshots)
+  }
+
+  /**
+   * 使用本地 PaddleOCR 服务识别偏差截图
+   */
+  private async recognizeScreenshotsWithPaddleOCR(
+    screenshots: { type: string; base64: string }[]
+  ): Promise<DeviationAnalysisResult> {
+    const results: DeviationAnalysisResult = {
+      projectName: '',
+      contractAmount: 0,
+      currentManpowerCost: 0,
+      taskProgress: 0,
+      members: [],
+      suggestion: ''
+    }
+
+    for (const screenshot of screenshots) {
+      try {
+        console.log(`[AI Service] PaddleOCR 正在识别 ${screenshot.type} 类型截图`)
+
+        const response = await axios.post(
+          this.paddleOcrUrl,
+          {
+            image: screenshot.base64,
+            extract_type: 'deviation'
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            timeout: 120000
+          }
+        )
+
+        if (response.data.code === 200 && response.data.data) {
+          const parsed = response.data.data
+          // 合并结果，优先使用非空值
+          if (parsed.projectName && !results.projectName) results.projectName = parsed.projectName
+          if (parsed.contractAmount && !results.contractAmount) results.contractAmount = parsed.contractAmount
+          if (parsed.currentManpowerCost && !results.currentManpowerCost) results.currentManpowerCost = parsed.currentManpowerCost
+          if (parsed.taskProgress && !results.taskProgress) results.taskProgress = parsed.taskProgress
+          if (parsed.members && parsed.members.length > 0 && results.members.length === 0) results.members = parsed.members
+        }
+      } catch (error: any) {
+        console.error(`[AI Service] PaddleOCR ${screenshot.type} 截图识别错误:`, error?.message)
+      }
+    }
+
+    console.log(`[AI Service] PaddleOCR 偏差截图识别完成:`, JSON.stringify(results))
+    return results
+  }
+
+  /**
+   * 使用云端 Finna API 识别偏差截图（备用）
+   */
+  private async recognizeScreenshotsWithFinna(
+    screenshots: { type: string; base64: string }[]
+  ): Promise<DeviationAnalysisResult> {
     const systemPrompt = `你是一个专业的IT项目管理助手。请分析用户提供的项目截图（包括合同金额、人力成本、成员明细、任务进度等），提取以下信息：
 1. 项目名称
 2. 合同金额（万元）
@@ -446,13 +573,13 @@ ${data.teamCosts.map(t => `- ${t.team}: 预期${t.expected}万, 实际${t.actual
 
     for (const screenshot of screenshots) {
       try {
-        console.log(`[AI Service] 正在识别 ${screenshot.type} 类型截图`)
+        console.log(`[AI Service] Finna 正在识别 ${screenshot.type} 类型截图`)
 
         const response = await axios.post<AIResponse>(
           this.ocrApiUrl,
           {
             model: this.ocrModel,
-            temperature: 0.3, // 降低温度提高识别准确性
+            temperature: 0.3,
             stream: false,
             messages: [
               { role: 'system', content: systemPrompt },

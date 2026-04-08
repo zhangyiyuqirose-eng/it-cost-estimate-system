@@ -92,10 +92,10 @@ class AIService {
     this.apiKey = process.env.AI_API_KEY || 'app-PvoiFWuSXcN4kwCBuplgOnnC'
     this.model = process.env.AI_MODEL || 'qwq-32b'
 
-    // OCR多模态模型配置 - Qwen/Qwen3-Omni-30B-A3B-Thinking（支持图像识别）
+    // OCR多模态模型配置 - tencent/Hunyuan-MT-7B（支持图像识别）
     this.ocrApiUrl = process.env.OCR_API_URL || 'https://www.finna.com.cn/v1/chat/completions'
-    this.ocrApiKey = process.env.OCR_API_KEY || 'app-KyYotJ6hzYVDIzQVVOJFzZgd'
-    this.ocrModel = process.env.OCR_MODEL || 'Qwen/Qwen3-Omni-30B-A3B-Thinking'
+    this.ocrApiKey = process.env.OCR_API_KEY || 'app-VQZKrtvW81qy8fvLuDl6Gxbq'
+    this.ocrModel = process.env.OCR_MODEL || 'tencent/Hunyuan-MT-7B'
 
     console.log(`[AI Service] 文本推理模型: ${this.model}, OCR模型: ${this.ocrModel}`)
   }

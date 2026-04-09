@@ -84,9 +84,18 @@ export interface ModuleInfo {
   name: string
   description?: string
   features?: string[]
+  functions?: FunctionInfo[]  // 新增：功能点列表（参考Python版本）
   complexity?: 'simple' | 'medium' | 'complex'
   estimatedManDays?: number
   associationSystems?: number
+}
+
+// 新增：功能点信息（参考Python版本结构）
+export interface FunctionInfo {
+  name: string
+  complexity: 'very_basic' | 'basic' | 'medium' | 'complex' | 'very_complex'
+  association_systems?: number  // 关联系统数量
+  association_coeff?: number    // 关联度系数（可选，如果直接提供）
 }
 
 export interface ComplexityConfig {
@@ -170,6 +179,9 @@ export interface CalculateEstimateResponse {
   stageDetail: StageDetail[]
   teamDetail: TeamDetail[]
   calcTrace: CalcTraceItem[]
+  traces?: FunctionTrace[]        // 新增：详细功能点计算轨迹
+  compliance?: ComplianceResult   // 新增：合规校验结果
+  totalItems?: number             // 新增：功能点总数
 }
 
 export interface CalcTraceItem {
@@ -177,6 +189,38 @@ export interface CalcTraceItem {
   input: Record<string, unknown>
   output: Record<string, unknown>
   formula?: string
+}
+
+// 新增：功能点计算轨迹（参考Python版本 traces 结构）
+export interface FunctionTrace {
+  module: string
+  function: string
+  complexity: string
+  base: number              // 复杂度基准人天
+  assoc: number             // 关联度系数
+  assoc_systems: number     // 关联系统数量
+  tech_stack: number        // 技术栈系数
+  mgmt: number              // 管理系数
+  phases: Record<string, {
+    flow_coeff: number      // 流程系数
+    uses_tech_stack: boolean
+    raw: number             // 原始计算值（含管理系数）
+    workload: number        // 最终工作量
+  }>
+}
+
+// 新增：合规校验详情（参考Python版本 compliance 结构）
+export interface ComplianceDetail {
+  pass: boolean
+  days: number
+  pct: number
+  min: number
+  max: number
+}
+
+export interface ComplianceResult {
+  all_pass: boolean
+  details: Record<string, ComplianceDetail>
 }
 
 // ==================== 成本消耗预估相关类型 ====================

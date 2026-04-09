@@ -163,6 +163,22 @@ const getAssociationCoefficient = (nSystems: number): number => {
   return 3.0
 }
 
+/**
+ * 阶段合计四舍五入到0.5人天（参考 Python round_phase_total 实现）
+ */
+const roundPhaseTotal = (v: number): number => {
+  if (v <= 0) return 0.0
+  return Math.round(Math.round(v * 2) / 2 * 10) / 10
+}
+
+/**
+ * 单功能点工作量保留两位小数（参考 Python round_workload 实现）
+ */
+const roundWorkload = (v: number): number => {
+  if (v <= 0) return 0.0
+  return Math.round(v * 100) / 100
+}
+
 // ==================== 路由定义 ====================
 
 /**
@@ -515,7 +531,7 @@ router.post('/:projectId/config', authMiddleware, async (req: Request, res: Resp
 })
 
 /**
- * POST /:projectId/calculate - 计算工作量（参考 Python 实现）
+ * POST /:projectId/calculate - 计算工作量（严格参考 Python estimate_workload_v2 实现）
  */
 router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -555,135 +571,248 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
       ? JSON.parse(config.unitPriceConfig || '{}')
       : DEFAULT_DAILY_RATES
 
-    // 工作量计算（参考 Python 实现）
-    const calcTrace: CalcTraceItem[] = []
+    // ========== 核心计算逻辑（严格参考 Python estimate_workload_v2）==========
+
     const items: any[] = []
+    const traces: any[] = []  // 详细功能点计算轨迹
+    const calcTrace: CalcTraceItem[] = []
+
+    // 阶段原始值累加器（未乘管理系数、未取整）
     const phaseRawSums: Record<string, number> = {}
 
     // 初始化阶段累加器
     for (const phase of PHASES) {
-      phaseRawSums[phase.name] = 0
+      phaseRawSums[phase.name] = 0.0
     }
 
-    // 逐模块逐功能计算
+    // 逐模块逐功能点计算
     for (const module of parseResult.modules) {
-      const features = module.features || [module.name]
+      // 获取功能点列表（关键：支持 functions 或 features 字段）
+      // Python版本使用 functions 数组，每个功能点有独立的 complexity 和 association_systems
+      const functions = (module as any).functions ||
+                        (module.features || []).map((f: string) => ({
+                          name: typeof f === 'string' ? f : (f as any).name || '未命名功能',
+                          complexity: (module as any).complexity || 'medium',
+                          association_systems: (module as any).associationSystems || 1
+                        }))
 
-      for (const featureName of features) {
-        const complexity = (module.complexity || 'medium').toLowerCase()
-        const baseDays = complexityConfig[complexity] || complexityConfig['medium'] || 1.5
+      for (const func of functions) {
+        const funcName = typeof func === 'string' ? func : (func.name || '未命名功能')
 
-        // 获取关联度系数
-        const associationSystems = (module as any).associationSystems || 1
-        const associationCoef = getAssociationCoefficient(associationSystems)
+        // 1. 获取复杂度（参考 Python 第478-482行）
+        let cx = String((func as any).complexity || 'medium').toLowerCase()
+        if (cx === 'simple') cx = 'basic'  // 兼容处理
+        if (!['very_basic', 'basic', 'medium', 'complex', 'very_complex'].includes(cx)) {
+          cx = 'medium'
+        }
 
+        // 2. 获取复杂度基准人天
+        const baseDays = complexityConfig[cx] || complexityConfig['medium'] || 1.5
+
+        // 3. 获取关联度系数（关键：从功能点获取 association_systems）
+        // 参考 Python 第496-502行
+        let assocCoeff = 1.0
+        let assocSystems = 1
+
+        if ((func as any).association_coeff !== undefined && (func as any).association_coeff !== null) {
+          // 如果直接提供了关联度系数
+          assocCoeff = parseFloat((func as any).association_coeff)
+        } else if ((func as any).association_systems !== undefined && (func as any).association_systems !== null) {
+          // 从关联系统数量计算
+          assocSystems = parseInt((func as any).association_systems) || 1
+          assocCoeff = getAssociationCoefficient(assocSystems)
+        } else if ((module as any).associationSystems !== undefined) {
+          // 兼容：从模块获取
+          assocSystems = (module as any).associationSystems
+          assocCoeff = getAssociationCoefficient(assocSystems)
+        }
+
+        // 4. 记录轨迹（参考 Python 第503-514行）
+        const trace: any = {
+          module: module.name,
+          function: funcName,
+          complexity: cx,
+          base: baseDays,
+          assoc: assocCoeff,
+          assoc_systems: assocSystems,
+          tech_stack: techStackCoefficient,
+          mgmt: managementCoefficient,
+          phases: {}
+        }
+
+        // 5. 逐阶段计算（参考 Python 第516-557行）
         for (const phase of PHASES) {
-          const flowCoef = flowCoefficients[phase.key] || 0
-          if (flowCoef === 0) continue
+          const flowCoeff = flowCoefficients[phase.key] || 0
+          if (flowCoeff === 0) continue
 
-          let rawDays: number
+          let rawNoMgmt: number
           if (phase.usesTechStack) {
-            rawDays = baseDays * associationCoef * flowCoef * techStackCoefficient
+            // 需求方案公式：基准 × 关联度 × 流程系数 × 技术栈系数
+            rawNoMgmt = baseDays * assocCoeff * flowCoeff * techStackCoefficient
           } else {
-            rawDays = baseDays * associationCoef * flowCoef
+            // 不含技术栈系数
+            rawNoMgmt = baseDays * assocCoeff * flowCoeff
           }
 
-          const daysWithMgmt = rawDays * (1 + managementCoefficient)
-          const roundedDays = Math.round(daysWithMgmt * 100) / 100
+          // 乘以管理系数
+          const rawWithMgmt = rawNoMgmt * (1 + managementCoefficient)
 
-          if (roundedDays > 0) {
+          // 单功能点工作量：保留两位小数
+          const workload = roundWorkload(rawWithMgmt)
+
+          if (workload > 0) {
             items.push({
               phase: phase.name,
               module: module.name,
-              function: featureName,
-              workload: roundedDays,
-              complexity
+              function: funcName,
+              workload,
+              complexity: cx
             })
-            phaseRawSums[phase.name] += daysWithMgmt
+            // 累加原始值（用于阶段合计的精确计算）
+            phaseRawSums[phase.name] += rawWithMgmt
+          }
+
+          // 记录阶段轨迹
+          trace.phases[phase.name] = {
+            flow_coeff: flowCoeff,
+            uses_tech_stack: phase.usesTechStack,
+            raw: Math.round(rawWithMgmt * 10000) / 10000,
+            workload
           }
         }
+
+        traces.push(trace)
       }
     }
 
-    // 阶段合计
-    const stageDetail: StageDetail[] = []
+    // 6. 阶段合计：对原始累加值取整到0.5（参考 Python 第559-562行）
+    const phaseTotals: Record<string, number> = {}
     for (const phase of PHASES) {
-      const totalDays = Math.round(phaseRawSums[phase.name] * 2) / 2 // 取整到0.5
-      stageDetail.push({
-        stage: phase.name,
-        manDays: totalDays,
-        percentage: 0, // 后面计算
-        cost: 0, // 后面计算
-        description: `${phase.name}阶段工作量`
-      })
+      phaseTotals[phase.name] = roundPhaseTotal(phaseRawSums[phase.name])
     }
 
-    // 投产上线
-    const preGoLiveTotal = stageDetail.reduce((sum, s) => sum + s.manDays, 0)
-    const goLiveDays = Math.round(preGoLiveTotal * goLivePercentage * 100) / 100
-    stageDetail.push({
-      stage: '投产上线',
-      manDays: goLiveDays,
-      percentage: 2,
-      cost: 0, // 后面计算
-      description: '上线部署及技术支持'
-    })
+    // 7. 投产上线计算（参考 Python 第564-567行）
+    // 投产上线 = Σ(需求+UI设计+技术设计+开发+技术测试+性能测试) × go_pct
+    const goLiveBase = ['需求', 'UI设计', '技术设计', '开发', '技术测试', '性能测试']
+      .reduce((sum, name) => sum + (phaseTotals[name] || 0), 0)
+    const goLiveDays = Math.round(goLiveBase * goLivePercentage * 100) / 100
+    phaseTotals['投产上线'] = goLiveDays
+
+    // 8. 总人天
+    const totalManDay = Math.round(Object.values(phaseTotals).reduce((sum, v) => sum + v, 0) * 100) / 100
+
+    // 构建阶段详情
+    const stageDetail: StageDetail[] = Object.entries(phaseTotals).map(([name, days]) => ({
+      stage: name,
+      manDays: days,
+      percentage: 0,
+      cost: 0,
+      description: `${name}阶段工作量`
+    }))
 
     // 计算占比
-    const totalManDay = stageDetail.reduce((sum, s) => sum + s.manDays, 0)
     stageDetail.forEach(s => {
       s.percentage = Math.round(s.manDays / totalManDay * 10000) / 100
     })
 
-    // 团队成本计算（参考 Python 实现）
-    const reqDays = stageDetail.find(s => s.stage === '需求')?.manDays || 0
-    const uiDays = stageDetail.find(s => s.stage === 'UI设计')?.manDays || 0
-    const techDesignDays = stageDetail.find(s => s.stage === '技术设计')?.manDays || 0
-    const devDays = stageDetail.find(s => s.stage === '开发')?.manDays || 0
-    const techTestDays = stageDetail.find(s => s.stage === '技术测试')?.manDays || 0
-    const perfTestDays = stageDetail.find(s => s.stage === '性能测试')?.manDays || 0
+    // ========== 团队成本计算（参考 Python calculate_team_costs）==========
 
+    const reqDays = phaseTotals['需求'] || 0
+    const uiDays = phaseTotals['UI设计'] || 0
+    const techDesignDays = phaseTotals['技术设计'] || 0
+    const devDays = phaseTotals['开发'] || 0
+    const techTestDays = phaseTotals['技术测试'] || 0
+    const perfTestDays = phaseTotals['性能测试'] || 0
+    const goLiveDaysVal = phaseTotals['投产上线'] || 0
+
+    // 产品团队 = 需求人天 × 产品经理单价
     const productCost = Math.round(reqDays * (dailyRates.product_manager || 2000) * 100) / 100
+
+    // UI团队 = UI设计人天 × UI设计单价
     const uiCost = Math.round(uiDays * (dailyRates.ui_designer || 1800) * 100) / 100
 
+    // 研发团队 = (技术设计+开发) × 0.4 × 前端单价 + × 0.6 × 后端单价
     const designDevTotal = techDesignDays + devDays
     const frontendDays = Math.round(designDevTotal * 0.4 * 100) / 100
     const backendDays = Math.round(designDevTotal * 0.6 * 100) / 100
     const devCost = Math.round(
-      frontendDays * (dailyRates.frontend_dev || 1800) +
-      backendDays * (dailyRates.backend_dev || 2000)
-    * 100) / 100
+      (frontendDays * (dailyRates.frontend_dev || 1800) +
+       backendDays * (dailyRates.backend_dev || 2000)) * 100
+    ) / 100
 
+    // 测试团队 = 技术测试 × 功能测试单价 + 性能测试 × 性能测试单价
     const testCost = Math.round(
-      techTestDays * (dailyRates.func_tester || 1500) +
-      perfTestDays * (dailyRates.perf_tester || 2000)
-    * 100) / 100
+      (techTestDays * (dailyRates.func_tester || 1500) +
+       perfTestDays * (dailyRates.perf_tester || 2000)) * 100
+    ) / 100
 
-    const pmDays = Math.round((preGoLiveTotal * managementCoefficient + goLiveDays) * 100) / 100
+    // 项目管理 = (go_live_base × mgmt_coeff + go_live) × PM单价
+    // 参考 Python 第623行
+    const pmDays = Math.round((goLiveBase * managementCoefficient + goLiveDaysVal) * 100) / 100
     const pmCost = Math.round(pmDays * (dailyRates.project_manager || 2000) * 100) / 100
-
-    const teamDetail: TeamDetail[] = [
-      { level: '产品团队', count: 1, dailyCost: dailyRates.product_manager || 2000, totalCost: productCost, manDays: Math.round(reqDays) },
-      { level: 'UI团队', count: 1, dailyCost: dailyRates.ui_designer || 1800, totalCost: uiCost, manDays: Math.round(uiDays) },
-      { level: '研发团队', count: Math.round(frontendDays + backendDays), dailyCost: 0, totalCost: devCost, manDays: Math.round(designDevTotal) },
-      { level: '测试团队', count: 1, dailyCost: 0, totalCost: testCost, manDays: Math.round(techTestDays + perfTestDays) },
-      { level: '项目管理', count: 1, dailyCost: dailyRates.project_manager || 2000, totalCost: pmCost, manDays: Math.round(pmDays) }
-    ]
 
     const totalCost = Math.round((productCost + uiCost + devCost + testCost + pmCost) * 100) / 100
     const manMonth = Math.round(totalManDay / 21.75 * 100) / 100
+
+    const teamDetail: TeamDetail[] = [
+      { level: '产品团队', count: 1, dailyCost: dailyRates.product_manager || 2000, totalCost: productCost, manDays: Math.round(reqDays * 100) / 100 },
+      { level: 'UI团队', count: 1, dailyCost: dailyRates.ui_designer || 1800, totalCost: uiCost, manDays: Math.round(uiDays * 100) / 100 },
+      { level: '研发团队', count: Math.round(frontendDays + backendDays), dailyCost: 0, totalCost: devCost, manDays: Math.round(designDevTotal * 100) / 100 },
+      { level: '测试团队', count: 1, dailyCost: 0, totalCost: testCost, manDays: Math.round((techTestDays + perfTestDays) * 100) / 100 },
+      { level: '项目管理', count: 1, dailyCost: dailyRates.project_manager || 2000, totalCost: pmCost, manDays: pmDays }
+    ]
 
     // 计算每个阶段的成本
     stageDetail.forEach(s => {
       s.cost = Math.round(s.manDays / totalManDay * totalCost * 100) / 100
     })
 
+    // ========== 合规校验（参考 Python validate_compliance）==========
+
+    const complianceDetails: Record<string, any> = {}
+    const checkPhases = ['需求', '设计', '开发', '技术测试', '性能测试', '投产上线']
+
+    // 设计阶段需要合并 UI设计 + 技术设计
+    const designDays = (phaseTotals['UI设计'] || 0) + (phaseTotals['技术设计'] || 0)
+
+    const checkMap: Record<string, number> = {
+      '需求': reqDays,
+      '设计': designDays,
+      '开发': devDays,
+      '技术测试': techTestDays,
+      '性能测试': perfTestDays,
+      '投产上线': goLiveDaysVal
+    }
+
+    const checkTotal = Object.values(checkMap).reduce((sum, v) => sum + v, 0)
+
+    for (const phaseName of checkPhases) {
+      const days = checkMap[phaseName] || 0
+      const pct = Math.round(days / checkTotal * 1000) / 10
+      const [minPct, maxPct] = COMPLIANCE_RANGES[phaseName] || [0, 100]
+      const passed = minPct <= pct && pct <= maxPct
+
+      complianceDetails[phaseName] = {
+        pass: passed,
+        days: Math.round(days * 100) / 100,
+        pct,
+        min: minPct,
+        max: maxPct
+      }
+    }
+
+    const allPass = Object.values(complianceDetails).every((d: any) => d.pass)
+    const compliance = {
+      all_pass: allPass,
+      details: complianceDetails
+    }
+
     // 添加计算轨迹
     calcTrace.push({
       step: '基础工作量计算',
       input: { modules: parseResult.modules.map(m => m.name), complexityConfig },
       output: { items: items.length },
-      formula: 'Σ(模块复杂度对应人天)'
+      formula: 'Σ(基准 × 关联度 × 流程系数 × [技术栈]) × (1 + 管理系数)'
     })
 
     calcTrace.push({
@@ -696,6 +825,12 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
       step: '团队成本计算',
       input: { teamConfig: teamDetail.map(t => t.level), dailyRates, totalManDay },
       output: { teamDetail, totalCost }
+    })
+
+    calcTrace.push({
+      step: '合规校验',
+      input: { stageDetail, complianceRanges: COMPLIANCE_RANGES },
+      output: { compliance }
     })
 
     // 保存结果
@@ -734,10 +869,13 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
       manMonth,
       stageDetail,
       teamDetail,
-      calcTrace
+      calcTrace,
+      traces,       // 新增：详细功能点计算轨迹
+      compliance,   // 新增：合规校验结果
+      totalItems: items.length
     }
 
-    console.log(`[Calculate] 计算完成: 总人天=${totalManDay}, 总成本=${totalCost}万元`)
+    console.log(`[Calculate] 计算完成: 总人天=${totalManDay}, 总成本=${totalCost}万元, 合规=${allPass ? '通过' : '存在异常'}`)
 
     sendResponse(res, response, '工作量计算成功')
   } catch (error) {
@@ -815,13 +953,19 @@ router.put('/:projectId/parse-result', authMiddleware, async (req: Request, res:
     // 获取现有解析结果
     const existingResult: ParseResult = document.parseResult ? JSON.parse(document.parseResult) : { modules: [], totalModules: 0 }
 
-    // 更新模块数据
+    // 更新模块数据（保留完整的功能点信息：name, complexity, association_systems）
     const updatedModules: ModuleInfo[] = modules.map((m: any) => {
       const existingModule = existingResult.modules.find((em: any) => em.name === m.name)
       return {
         name: m.name,
         description: m.description || existingModule?.description || '',
         features: m.functions.map((f: any) => f.name),
+        // 关键：保存完整的 functions 数组，包含 complexity 和 association_systems
+        functions: m.functions.map((f: any) => ({
+          name: f.name,
+          complexity: f.complexity || 'medium',
+          association_systems: f.association_systems || 1
+        })),
         complexity: m.functions.length > 0 ? mapComplexity(m.functions[0].complexity) : 'medium',
         associationSystems: m.functions.length > 0 ? m.functions[0].association_systems || 1 : 1
       }

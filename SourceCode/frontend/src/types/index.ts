@@ -70,6 +70,47 @@ export interface UnitPrice {
   price: number
 }
 
+// 功能点信息（参考后端 FunctionInfo）
+export interface FunctionInfo {
+  name: string
+  complexity: 'very_basic' | 'basic' | 'medium' | 'complex' | 'very_complex'
+  association_systems?: number
+  association_coeff?: number
+}
+
+// 功能点计算轨迹（参考后端 FunctionTrace）
+export interface FunctionTrace {
+  module: string
+  function: string
+  complexity: string
+  base: number
+  assoc: number
+  assoc_systems: number
+  tech_stack: number
+  mgmt: number
+  phases: Record<string, {
+    flow_coeff: number
+    uses_tech_stack: boolean
+    raw: number
+    workload: number
+  }>
+}
+
+// 合规校验详情
+export interface ComplianceDetail {
+  pass: boolean
+  days: number
+  pct: number
+  min: number
+  max: number
+}
+
+// 合规校验结果
+export interface ComplianceResult {
+  all_pass: boolean
+  details: Record<string, ComplianceDetail>
+}
+
 export interface EstimateResult {
   projectId: number
   totalManDay: number
@@ -79,6 +120,9 @@ export interface EstimateResult {
   stageBreakdown: StageBreakdown[]
   teamBreakdown: TeamBreakdown[]
   calculationTrace: CalculationTrace[]
+  traces?: FunctionTrace[]        // 新增：详细功能点计算轨迹
+  compliance?: ComplianceResult   // 新增：合规校验结果
+  totalItems?: number             // 新增：功能点总数
 }
 
 export interface StageBreakdown {

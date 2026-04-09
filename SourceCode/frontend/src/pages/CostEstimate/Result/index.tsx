@@ -1155,7 +1155,7 @@ export default function CostEstimateResult() {
               icon: <CheckCircleOutlined />,
               children: (
                 <div>
-                  {/* 占比合规校验结果 */}
+                  {/* 占比合规校验结果 - 表格样式 */}
                   <Card
                     title={
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1165,94 +1165,155 @@ export default function CostEstimateResult() {
                     }
                     style={{ borderRadius: 18, marginBottom: 28, border: '1px solid var(--color-border-light)' }}
                   >
-                    <Row gutter={[20, 20]}>
-                      {complianceChecks.map((check) => (
-                        <Col xs={24} sm={12} md={8} key={check.stage}>
-                          <Card
-                            size="small"
-                            style={{
-                              borderRadius: 14,
-                              border: check.isCompliant ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)',
-                              background: check.isCompliant
-                                ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(52, 211, 153, 0.08) 100%)'
-                                : 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(248, 113, 113, 0.08) 100%)',
-                            }}
-                          >
-                            <div style={{ marginBottom: 14 }}>
-                              <Text strong style={{ fontSize: 14 }}>{check.stage}</Text>
-                            </div>
-                            <div style={{ marginBottom: 10 }}>
-                              <Text type="secondary" style={{ fontSize: 12 }}>实际占比</Text>
-                              <br />
-                              <Text strong style={{ color: '#0f172a' }}>
-                                {(check.actualRatio * 100).toFixed(1)}%
-                              </Text>
-                            </div>
-                            <div style={{ marginBottom: 10 }}>
-                              <Text type="secondary" style={{ fontSize: 12 }}>预期范围</Text>
-                              <br />
-                              <Text style={{ color: '#64748b' }}>
-                                {(check.expectedMin * 100).toFixed(1)}% - {(check.expectedMax * 100).toFixed(1)}%
-                              </Text>
-                            </div>
-                            <div>
-                              {check.isCompliant ? (
-                                <Tag
-                                  icon={<CheckCircleOutlined />}
-                                  style={{
-                                    borderRadius: 10,
-                                    background: '#10B981',
-                                    color: '#fff',
-                                    border: 'none',
-                                  }}
-                                >
-                                  合规
+                    <Table
+                      dataSource={complianceChecks.map((check, index) => ({
+                        key: index,
+                        stage: check.stage,
+                        workdays: result?.stageBreakdown?.find(s => s.stage === check.stage)?.workdays || 0,
+                        actualRatio: (check.actualRatio * 100).toFixed(1),
+                        expectedRange: `${(check.expectedMin * 100).toFixed(0)}% ~ ${(check.expectedMax * 100).toFixed(0)}%`,
+                        isCompliant: check.isCompliant,
+                        progress: check.actualRatio * 100,
+                        minPercent: check.expectedMin * 100,
+                        maxPercent: check.expectedMax * 100,
+                      }))}
+                      pagination={false}
+                      columns={[
+                        {
+                          title: '阶段',
+                          dataIndex: 'stage',
+                          key: 'stage',
+                          width: 120,
+                          render: (value: string) => (
+                            <Text strong style={{ color: '#0f172a' }}>{value}</Text>
+                          ),
+                        },
+                        {
+                          title: '工作量（人天）',
+                          dataIndex: 'workdays',
+                          key: 'workdays',
+                          width: 120,
+                          align: 'center' as const,
+                          render: (value: number) => (
+                            <Text strong style={{ color: '#3B82F6' }}>{value.toFixed(1)}</Text>
+                          ),
+                        },
+                        {
+                          title: '实际占比',
+                          dataIndex: 'actualRatio',
+                          key: 'actualRatio',
+                          width: 100,
+                          align: 'center' as const,
+                          render: (value: string) => (
+                            <Text style={{ color: '#0f172a', fontWeight: 500 }}>{value}%</Text>
+                          ),
+                        },
+                        {
+                          title: '合规区间',
+                          dataIndex: 'expectedRange',
+                          key: 'expectedRange',
+                          width: 120,
+                          align: 'center' as const,
+                          render: (value: string) => (
+                            <Text style={{ color: '#64748b' }}>{value}</Text>
+                          ),
+                        },
+                        {
+                          title: '占比分布',
+                          key: 'progress',
+                          width: 200,
+                          render: (_: any, record: any) => {
+                            const { progress, minPercent, maxPercent, isCompliant } = record
+                            return (
+                              <div style={{ position: 'relative' }}>
+                                <Progress
+                                  percent={progress}
+                                  size="small"
+                                  strokeColor={isCompliant ? '#10B981' : '#EF4444'}
+                                  trailColor="#E2E8F0"
+                                  format={() => ''}
+                                  style={{ marginBottom: 4 }}
+                                />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94A3B8' }}>
+                                  <span>{minPercent}%</span>
+                                  <span style={{ color: isCompliant ? '#10B981' : '#EF4444', fontWeight: 500 }}>
+                                    {progress.toFixed(1)}%
+                                  </span>
+                                  <span>{maxPercent}%</span>
+                                </div>
+                              </div>
+                            )
+                          },
+                        },
+                        {
+                          title: '合规结果',
+                          dataIndex: 'isCompliant',
+                          key: 'isCompliant',
+                          width: 100,
+                          align: 'center' as const,
+                          render: (value: boolean) => (
+                            value ? (
+                              <Tag
+                                icon={<CheckCircleOutlined />}
+                                style={{
+                                  borderRadius: 8,
+                                  background: '#10B981',
+                                  color: '#fff',
+                                  border: 'none',
+                                  fontWeight: 500,
+                                }}
+                              >
+                                通过
+                              </Tag>
+                            ) : (
+                              <Tag
+                                icon={<ExclamationCircleOutlined />}
+                                style={{
+                                  borderRadius: 8,
+                                  background: '#EF4444',
+                                  color: '#fff',
+                                  border: 'none',
+                                  fontWeight: 500,
+                                }}
+                              >
+                                超出
+                              </Tag>
+                            )
+                          ),
+                        },
+                      ]}
+                      summary={() => (
+                        <Table.Summary fixed>
+                          <Table.Summary.Row>
+                            <Table.Summary.Cell index={0} colSpan={5}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                {complianceChecks.every((c) => c.isCompliant) ? (
+                                  <CheckCircleOutlined style={{ color: '#10B981', fontSize: 18 }} />
+                                ) : (
+                                  <ExclamationCircleOutlined style={{ color: '#F59E0B', fontSize: 18 }} />
+                                )}
+                                <Text style={{ color: '#0f172a', fontWeight: 500 }}>
+                                  {complianceChecks.every((c) => c.isCompliant)
+                                    ? '✅ 全部合规：所有阶段占比均符合预期范围，成本分配合理'
+                                    : `⚠️ 存在异常：${complianceChecks.filter((c) => !c.isCompliant).length} 个阶段占比超出合规区间`}
+                                </Text>
+                              </div>
+                            </Table.Summary.Cell>
+                            <Table.Summary.Cell index={1}>
+                              {complianceChecks.every((c) => c.isCompliant) ? (
+                                <Tag style={{ borderRadius: 8, background: '#10B981', color: '#fff', border: 'none' }}>
+                                  全部通过
                                 </Tag>
                               ) : (
-                                <Tag
-                                  icon={<ExclamationCircleOutlined />}
-                                  style={{
-                                    borderRadius: 10,
-                                    background: '#EF4444',
-                                    color: '#fff',
-                                    border: 'none',
-                                  }}
-                                >
-                                  不合规
+                                <Tag style={{ borderRadius: 8, background: '#F59E0B', color: '#fff', border: 'none' }}>
+                                  需关注
                                 </Tag>
                               )}
-                            </div>
-                          </Card>
-                        </Col>
-                      ))}
-                    </Row>
-
-                    {/* 合规汇总 */}
-                    <Card
-                      style={{
-                        marginTop: 20,
-                        borderRadius: 14,
-                        background: complianceChecks.every((c) => c.isCompliant)
-                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(52, 211, 153, 0.08) 100%)'
-                          : 'linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(251, 191, 36, 0.08) 100%)',
-                        border: complianceChecks.every((c) => c.isCompliant)
-                          ? '1px solid rgba(16, 185, 129, 0.25)'
-                          : '1px solid rgba(245, 158, 11, 0.25)',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                        {complianceChecks.every((c) => c.isCompliant) ? (
-                          <CheckCircleOutlined style={{ color: '#10B981', fontSize: 20 }} />
-                        ) : (
-                          <ExclamationCircleOutlined style={{ color: '#F59E0B', fontSize: 20 }} />
-                        )}
-                        <Text style={{ color: '#0f172a' }}>
-                          {complianceChecks.every((c) => c.isCompliant)
-                            ? '所有阶段占比均符合预期范围，成本分配合理'
-                            : `存在 ${complianceChecks.filter((c) => !c.isCompliant).length} 个阶段占比不合规，请检查计算参数`}
-                        </Text>
-                      </div>
-                    </Card>
+                            </Table.Summary.Cell>
+                          </Table.Summary.Row>
+                        </Table.Summary>
+                      )}
+                    />
                   </Card>
 
                   {/* 计算轨迹展示 */}

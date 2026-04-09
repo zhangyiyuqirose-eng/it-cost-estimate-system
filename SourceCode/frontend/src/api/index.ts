@@ -238,8 +238,8 @@ export const estimateApi = {
   getParseResult: (projectId: number) =>
     api.get<ApiResponse<any>>(`/estimate/${projectId}/parse-result`),
 
-  // 更新解析结果（功能点编辑）
-  updateParseResult: (projectId: number, data: { modules: any[] }) =>
+  // 更新解析结果（功能点编辑、项目信息）
+  updateParseResult: (projectId: number, data: { modules?: any[]; projectName?: string; systemName?: string }) =>
     api.put<ApiResponse<any>>(`/estimate/${projectId}/parse-result`, data),
 
   getDefaultConfig: () =>
@@ -273,8 +273,16 @@ export const consumptionApi = {
     })
   },
 
+  // 新增：根据项目编号查询项目信息
+  queryByProjectCode: (projectCode: string) =>
+    api.get<ApiResponse<any>>(`/consumption/project/${projectCode}`),
+
   saveProjectInfo: (projectId: number, data: any) =>
     api.post<ApiResponse<any>>(`/consumption/${projectId}/info`, data),
+
+  // 新增：保存项目人员信息
+  saveMembers: (projectId: number, members: any[]) =>
+    api.post<ApiResponse<any>>(`/consumption/${projectId}/save-members`, { members }),
 
   calculateCost: (projectId: number) =>
     api.post<ApiResponse<any>>(`/consumption/${projectId}/calculate`),
@@ -288,10 +296,10 @@ export const consumptionApi = {
 
 // 成本偏差监控相关API
 export const deviationApi = {
-  uploadImages: (files: File[], type: string) => {
+  // 修改：合并上传，支持多张图片
+  uploadImages: (files: File[]) => {
     const formData = new FormData()
-    files.forEach((file) => formData.append('files', file))
-    formData.append('type', type)
+    files.forEach((file) => formData.append('images', file))
     return api.post<ApiResponse<any>>('/deviation/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })

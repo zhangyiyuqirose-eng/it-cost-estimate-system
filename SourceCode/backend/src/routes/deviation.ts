@@ -219,17 +219,19 @@ const DEFAULT_EXPECTED_STAGES: StageInfo[] = [
 // ==================== 路由定义 ====================
 
 /**
- * POST /upload - 上传项目截图
+ * POST /upload - 上传项目截图（支持多张图片）
  */
-router.post('/upload', authMiddleware, upload.single('image'), async (req: Request, res: Response) => {
+router.post('/upload', authMiddleware, upload.array('images', 20), async (req: Request, res: Response) => {
   try {
     const authReq = req as AuthenticatedRequest
     const userId = authReq.userId
-    const file = req.file
+    const files = req.files as Express.Multer.File[]
 
-    if (!file) {
+    if (!files || files.length === 0) {
       return sendError(res, 400, '请上传截图文件')
     }
+
+    console.log(`[Deviation] 上传了 ${files.length} 张截图`)
 
     // 创建项目
     const project = await prisma.project.create({
@@ -240,6 +242,21 @@ router.post('/upload', authMiddleware, upload.single('image'), async (req: Reque
         status: 'ongoing'
       }
     })
+
+    // 创建项目专属截图目录
+    const projectScreenshotsDir = path.join(uploadDir, String(project.id))
+    if (!fs.existsSync(projectScreenshotsDir)) {
+      fs.mkdirSync(projectScreenshotsDir, { recursive: true })
+    }
+
+    // 将上传的截图移动到项目专属目录
+    for (const file of files) {
+      const srcPath = path.join(uploadDir, file.filename)
+      const destPath = path.join(projectScreenshotsDir, file.filename)
+      if (fs.existsSync(srcPath)) {
+        fs.renameSync(srcPath, destPath)
+      }
+    }
 
     // 创建初始偏差记录
     await prisma.costDeviation.create({
@@ -257,7 +274,8 @@ router.post('/upload', authMiddleware, upload.single('image'), async (req: Reque
 
     sendResponse(res, {
       projectId: project.id,
-      filePath: `/uploads/screenshots/${file.filename}`
+      uploadedCount: files.length,
+      filePath: `/uploads/screenshots/${project.id}`
     }, '截图上传成功')
   } catch (error) {
     console.error('Upload error:', error)

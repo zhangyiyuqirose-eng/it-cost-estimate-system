@@ -17,6 +17,9 @@ import {
   Spin,
   Radio,
   Tooltip,
+  Select,
+  DatePicker,
+  Tag,
 } from 'antd'
 import {
   InboxOutlined,
@@ -29,11 +32,18 @@ import {
   CameraOutlined,
   ArrowRightOutlined,
   SettingOutlined,
+  PlusOutlined,
+  DeleteOutlined,
+  TeamOutlined,
+  DollarOutlined,
+  FireOutlined,
 } from '@ant-design/icons'
 import type { UploadProps, UploadFile } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import dayjs from 'dayjs'
 import { deviationApi } from '@/api'
-import type { ProjectMemberInfo, BaselineMode } from '@/types'
+import { MEMBER_LEVEL_DAILY_COST } from '@/types'
+import type { MemberLevel, ProjectMemberInfo, BaselineMode } from '@/types'
 
 const { Text, Title } = Typography
 const { Dragger } = Upload
@@ -52,38 +62,6 @@ const stepItems = [
   },
 ]
 
-// 截图类型配置
-const screenshotTypes = [
-  {
-    key: 'contract',
-    title: '项目合同金额截图',
-    description: '上传包含合同金额信息的截图',
-    icon: '💰',
-    color: '#3B82F6',
-  },
-  {
-    key: 'manpower',
-    title: '项目当前人力成本截图',
-    description: '上传包含当前人力成本统计的截图',
-    icon: '👥',
-    color: '#10B981',
-  },
-  {
-    key: 'members',
-    title: '项目当前成员明细截图',
-    description: '上传包含团队成员详细信息的多张截图',
-    icon: '📋',
-    color: '#8B5CF6',
-  },
-  {
-    key: 'devops',
-    title: 'DevOps任务完成情况截图',
-    description: '上传DevOps系统中任务进度相关截图',
-    icon: '📊',
-    color: '#F59E0B',
-  },
-]
-
 // 默认阶段比例配置
 const defaultStageRatios = [
   { stage: '需求', ratio: 15 },
@@ -94,64 +72,23 @@ const defaultStageRatios = [
   { stage: '投产', ratio: 10 },
 ]
 
-// 成员信息表格列配置
-const memberColumns: ColumnsType<ProjectMemberInfo> = [
-  {
-    title: '姓名',
-    dataIndex: 'name',
-    key: 'name',
-    width: 100,
-    render: (value: string) => (
-      <Text style={{ fontWeight: 500, color: '#0f172a' }}>{value}</Text>
-    ),
-  },
-  {
-    title: '角色',
-    dataIndex: 'role',
-    key: 'role',
-    width: 120,
-    render: (value: string) => (
-      <Text style={{
-        padding: '4px 12px',
-        borderRadius: 8,
-        background: '#f1f5f9',
-        color: '#475569',
-        fontSize: 12,
-      }}>
-        {value}
-      </Text>
-    ),
-  },
-  {
-    title: '级别',
-    dataIndex: 'level',
-    key: 'level',
-    width: 80,
-    render: (value: string) => (
-      <Text style={{
-        padding: '4px 12px',
-        borderRadius: 8,
-        background: '#3B82F615',
-        color: '#3B82F6',
-        fontSize: 12,
-        fontWeight: 500,
-      }}>
-        {value}
-      </Text>
-    ),
-  },
-  {
-    title: '已报工时(小时)',
-    dataIndex: 'reportedHours',
-    key: 'reportedHours',
-    width: 120,
-    render: (value: number) => (
-      <Text strong style={{ color: '#3B82F6' }}>
-        {value?.toFixed(1) || '-'}
-      </Text>
-    ),
-  },
+// 成员等级选项
+const levelOptions: { value: MemberLevel; label: string }[] = [
+  { value: 'P5', label: 'P5' },
+  { value: 'P6', label: 'P6' },
+  { value: 'P7', label: 'P7' },
+  { value: 'P8', label: 'P8' },
 ]
+
+// 成员表单数据接口
+interface MemberFormData {
+  key: string
+  name: string
+  department?: string
+  level: MemberLevel
+  role?: string
+  reportedHours: number
+}
 
 export default function CostDeviationInput() {
   const navigate = useNavigate()
@@ -160,13 +97,8 @@ export default function CostDeviationInput() {
   // 步骤状态
   const [currentStep, setCurrentStep] = useState(0)
 
-  // 截图上传状态
-  const [screenshotFiles, setScreenshotFiles] = useState<Record<string, UploadFile[]>>({
-    contract: [],
-    manpower: [],
-    members: [],
-    devops: [],
-  })
+  // 统一截图上传状态（合并4个入口）
+  const [screenshotFiles, setScreenshotFiles] = useState<UploadFile[]>([])
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
 
@@ -174,6 +106,17 @@ export default function CostDeviationInput() {
   const [recognizing, setRecognizing] = useState(false)
   const [recognitionResult, setRecognitionResult] = useState<any>(null)
   const [projectId, setProjectId] = useState<number | null>(null)
+
+  // 项目信息模块
+  const [projectInfo, setProjectInfo] = useState<{
+    projectName: string
+    contractAmount: number
+    currentManpowerCost: number
+    devopsProgress: number
+  } | null>(null)
+
+  // 人员清单数据
+  const [members, setMembers] = useState<MemberFormData[]>([])
 
   // 基准模式状态
   const [baselineMode, setBaselineMode] = useState<BaselineMode>('default')
@@ -192,10 +135,12 @@ export default function CostDeviationInput() {
     return total === 100
   }
 
-  // 处理截图上传
-  const handleScreenshotUpload = async (type: string) => {
-    const files = screenshotFiles[type]
-    if (!files || files.length === 0) {
+  // 生成唯一key
+  const generateKey = () => `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+  // 处理统一上传
+  const handleUpload = async () => {
+    if (screenshotFiles.length === 0) {
       message.warning('请先选择要上传的截图')
       return
     }
@@ -215,14 +160,14 @@ export default function CostDeviationInput() {
         })
       }, 200)
 
-      const uploadFiles = files.map((f) => f.originFileObj as File).filter(Boolean)
-      const response = await deviationApi.uploadImages(uploadFiles, type)
+      const uploadFiles = screenshotFiles.map((f) => f.originFileObj as File).filter(Boolean)
+      const response = await deviationApi.uploadImages(uploadFiles)
 
       clearInterval(progressInterval)
       setUploadProgress(100)
 
       if (response.data.code === 0 || response.data.code === 200) {
-        message.success(`${screenshotTypes.find(t => t.key === type)?.title}上传成功`)
+        message.success('截图上传成功')
         if (response.data.data?.projectId) {
           setProjectId(response.data.data.projectId)
         }
@@ -248,14 +193,36 @@ export default function CostDeviationInput() {
         setRecognitionResult(response.data.data)
         message.success('AI识别完成')
 
-        // 自动填充表单
+        // 自动填充项目信息
         if (response.data.data) {
-          form.setFieldsValue({
-            projectName: response.data.data.projectName,
-            contractAmount: response.data.data.contractAmount,
-            currentManpowerCost: response.data.data.currentManpowerCost,
-            taskProgress: response.data.data.taskProgress,
+          const data = response.data.data
+          setProjectInfo({
+            projectName: data.projectName || '',
+            contractAmount: data.totalContractAmount || 0,
+            currentManpowerCost: data.currentCostConsumption || 0,
+            devopsProgress: data.taskProgress || 0,
           })
+
+          form.setFieldsValue({
+            projectName: data.projectName,
+            contractAmount: data.totalContractAmount,
+            currentManpowerCost: data.currentCostConsumption,
+            taskProgress: data.taskProgress,
+          })
+
+          // 初始化成员列表
+          if (data.members && data.members.length > 0) {
+            setMembers(
+              data.members.map((m: any) => ({
+                key: generateKey(),
+                name: m.name,
+                department: m.department || '',
+                level: m.level as MemberLevel,
+                role: m.role || '',
+                reportedHours: m.reportedHours || 0,
+              }))
+            )
+          }
         }
       }
     } catch {
@@ -263,6 +230,125 @@ export default function CostDeviationInput() {
     } finally {
       setRecognizing(false)
     }
+  }
+
+  // 成员表格列配置
+  const memberColumns: ColumnsType<MemberFormData> = [
+    {
+      title: '姓名',
+      dataIndex: 'name',
+      key: 'name',
+      width: 120,
+      render: (value: string, record) => (
+        <Input
+          value={value}
+          onChange={(e) => handleMemberChange(record.key, 'name', e.target.value)}
+          placeholder="请输入姓名"
+          maxLength={10}
+          style={{ width: '100%', borderRadius: 8 }}
+        />
+      ),
+    },
+    {
+      title: '部门',
+      dataIndex: 'department',
+      key: 'department',
+      width: 120,
+      render: (value: string, record) => (
+        <Input
+          value={value || ''}
+          onChange={(e) => handleMemberChange(record.key, 'department', e.target.value)}
+          placeholder="请输入部门"
+          style={{ width: '100%', borderRadius: 8 }}
+        />
+      ),
+    },
+    {
+      title: '级别',
+      dataIndex: 'level',
+      key: 'level',
+      width: 100,
+      render: (value: MemberLevel, record) => (
+        <Select
+          value={value}
+          onChange={(v: MemberLevel) => handleMemberChange(record.key, 'level', v)}
+          options={levelOptions}
+          placeholder="请选择等级"
+          style={{ width: '100%' }}
+        />
+      ),
+    },
+    {
+      title: '角色',
+      dataIndex: 'role',
+      key: 'role',
+      width: 120,
+      render: (value: string, record) => (
+        <Input
+          value={value || ''}
+          onChange={(e) => handleMemberChange(record.key, 'role', e.target.value)}
+          placeholder="请输入角色"
+          style={{ width: '100%', borderRadius: 8 }}
+        />
+      ),
+    },
+    {
+      title: '已报工时(小时)',
+      dataIndex: 'reportedHours',
+      key: 'reportedHours',
+      width: 130,
+      render: (value: number, record) => (
+        <InputNumber
+          value={value}
+          onChange={(v) => handleMemberChange(record.key, 'reportedHours', v || 0)}
+          min={0}
+          precision={1}
+          style={{ width: '100%', borderRadius: 8 }}
+        />
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 80,
+      render: (_, record) => (
+        <Button
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
+          onClick={() => handleDeleteMember(record.key)}
+        />
+      ),
+    },
+  ]
+
+  // 更新成员字段
+  const handleMemberChange = (
+    key: string,
+    field: keyof MemberFormData,
+    value: string | number | MemberLevel
+  ) => {
+    setMembers((prev) =>
+      prev.map((m) => (m.key === key ? { ...m, [field]: value } : m))
+    )
+  }
+
+  // 新增成员
+  const handleAddMember = () => {
+    const newMember: MemberFormData = {
+      key: generateKey(),
+      name: '',
+      department: '',
+      level: 'P5' as MemberLevel,
+      role: '',
+      reportedHours: 0,
+    }
+    setMembers((prev) => [...prev, newMember])
+  }
+
+  // 删除成员
+  const handleDeleteMember = (key: string) => {
+    setMembers((prev) => prev.filter((m) => m.key !== key))
   }
 
   // 上传工作量评估表
@@ -331,11 +417,12 @@ export default function CostDeviationInput() {
     }
   }
 
-  // 截图上传组件配置
-  const getDraggerProps = (type: string): UploadProps => ({
-    name: 'files',
+  // 统一截图上传配置（合并后的单一入口）
+  const unifiedUploadProps: UploadProps = {
+    name: 'images',
     multiple: true,
-    fileList: screenshotFiles[type],
+    fileList: screenshotFiles,
+    maxCount: 20,
     beforeUpload: (file: File) => {
       const isValidType = file.type.startsWith('image/')
       if (!isValidType) {
@@ -350,17 +437,14 @@ export default function CostDeviationInput() {
       return false // 阻止自动上传，手动控制
     },
     onChange: (info) => {
-      setScreenshotFiles((prev) => ({
-        ...prev,
-        [type]: info.fileList,
-      }))
+      setScreenshotFiles(info.fileList)
     },
     accept: 'image/*',
     showUploadList: {
       showDownloadIcon: false,
       showRemoveIcon: true,
     },
-  })
+  }
 
   // 基准文件上传配置
   const baselineUploadProps: UploadProps = {
@@ -437,7 +521,7 @@ export default function CostDeviationInput() {
         </div>
       </div>
 
-      {/* 截图上传区域 */}
+      {/* 统一截图上传区域（合并后的单一入口） */}
       <Card
         style={{
           borderRadius: 24,
@@ -450,56 +534,45 @@ export default function CostDeviationInput() {
             <CameraOutlined style={{ marginRight: 10, color: '#8B5CF6' }} />
             上传项目截图
           </Title>
-          <Text type="secondary" style={{ fontSize: 14 }}>请上传以下4类截图，AI将自动识别并提取关键信息</Text>
+          <Text type="secondary" style={{ fontSize: 14 }}>
+            请上传包含合同金额、人力成本、成员明细、DevOps任务进度等信息的截图（最多20张），AI将自动识别并提取关键信息
+          </Text>
         </div>
 
-        <Row gutter={[20, 20]}>
-          {screenshotTypes.map((type) => (
-            <Col xs={24} md={12} key={type.key}>
-              <Card
-                style={{
-                  borderRadius: 18,
-                  border: '1px solid var(--color-border-light)',
-                  height: '100%',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <span style={{ fontSize: 26 }}>{type.icon}</span>
-                    <div>
-                      <Text strong style={{ fontSize: 14 }}>{type.title}</Text>
-                    </div>
-                  </div>
-                  <Button
-                    type="primary"
-                    size="small"
-                    icon={<UploadOutlined />}
-                    onClick={() => handleScreenshotUpload(type.key)}
-                    disabled={screenshotFiles[type.key].length === 0 || uploading}
-                    style={{
-                      borderRadius: 10,
-                      background: type.color,
-                      border: 'none',
-                    }}
-                  >
-                    上传
-                  </Button>
-                </div>
-                <Dragger {...getDraggerProps(type.key)} disabled={uploading}>
-                  <p className="ant-upload-drag-icon">
-                    <InboxOutlined style={{ color: type.color, fontSize: 36 }} />
-                  </p>
-                  <p className="ant-upload-text" style={{ fontSize: 13 }}>
-                    点击或拖拽图片到此区域
-                  </p>
-                  <p className="ant-upload-hint" style={{ fontSize: 12 }}>
-                    {type.description}
-                  </p>
-                </Dragger>
-              </Card>
-            </Col>
-          ))}
-        </Row>
+        <Dragger {...unifiedUploadProps} disabled={uploading}>
+          <p className="ant-upload-drag-icon">
+            <InboxOutlined style={{ color: '#8B5CF6', fontSize: 48 }} />
+          </p>
+          <p className="ant-upload-text" style={{ fontSize: 16, fontWeight: 500 }}>
+            点击或拖拽多张图片到此区域
+          </p>
+          <p className="ant-upload-hint" style={{ fontSize: 13 }}>
+            支持批量上传，最多20张图片，单个文件不超过10MB
+          </p>
+        </Dragger>
+
+        {/* 上传按钮 */}
+        <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text type="secondary">
+            已选择 {screenshotFiles.length} 张图片
+          </Text>
+          <Button
+            type="primary"
+            size="large"
+            icon={<UploadOutlined />}
+            onClick={handleUpload}
+            disabled={screenshotFiles.length === 0 || uploading}
+            style={{
+              borderRadius: 12,
+              height: 44,
+              background: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
+              border: 'none',
+              fontWeight: 600,
+            }}
+          >
+            上传截图
+          </Button>
+        </div>
 
         {/* 上传进度 */}
         {uploading && (
@@ -534,13 +607,13 @@ export default function CostDeviationInput() {
           >
             开始AI识别
           </Button>
-          <Tooltip title="AI将识别上传的截图，提取项目名称、合同金额、人力成本等信息">
+          <Tooltip title="AI将识别上传的截图，提取项目名称、合同金额、人力成本、成员信息等">
             <InfoCircleOutlined style={{ color: '#64748b', marginLeft: 14, alignSelf: 'center' }} />
           </Tooltip>
         </div>
       </Card>
 
-      {/* AI识别结果展示 */}
+      {/* AI识别状态 */}
       {recognizing && (
         <Card
           style={{
@@ -555,7 +628,8 @@ export default function CostDeviationInput() {
         </Card>
       )}
 
-      {recognitionResult && !recognizing && (
+      {/* 项目信息模块 */}
+      {projectInfo && !recognizing && (
         <Card
           style={{
             borderRadius: 24,
@@ -565,8 +639,8 @@ export default function CostDeviationInput() {
         >
           <div style={{ marginBottom: 24 }}>
             <Title level={4} style={{ marginBottom: 8, fontWeight: 600 }}>
-              <CheckCircleOutlined style={{ marginRight: 10, color: '#10B981' }} />
-              AI识别结果
+              <DollarOutlined style={{ marginRight: 10, color: '#10B981' }} />
+              项目信息概览
             </Title>
             <Text type="secondary" style={{ fontSize: 14 }}>以下信息已从截图自动识别提取，如有偏差可手动修正</Text>
           </div>
@@ -585,14 +659,89 @@ export default function CostDeviationInput() {
             </div>
           </Card>
 
-          <Form form={form} layout="vertical">
+          <Row gutter={[24, 24]}>
+            <Col xs={12} sm={6}>
+              <Card
+                style={{
+                  borderRadius: 16,
+                  textAlign: 'center',
+                  background: 'linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)',
+                  border: 'none',
+                }}
+              >
+                <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}>项目名称</Text>
+                <div style={{ marginTop: 12 }}>
+                  <Text strong style={{ color: '#fff', fontSize: 18 }}>
+                    {projectInfo.projectName || '-'}
+                  </Text>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={12} sm={6}>
+              <Card
+                style={{
+                  borderRadius: 16,
+                  textAlign: 'center',
+                  background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+                  border: 'none',
+                }}
+              >
+                <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}>合同金额</Text>
+                <div style={{ marginTop: 12 }}>
+                  <Text strong style={{ color: '#fff', fontSize: 18 }}>
+                    {projectInfo.contractAmount?.toFixed(2) || '-'}
+                  </Text>
+                  <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}> 万元</Text>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={12} sm={6}>
+              <Card
+                style={{
+                  borderRadius: 16,
+                  textAlign: 'center',
+                  background: 'linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)',
+                  border: 'none',
+                }}
+              >
+                <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}>人力成本</Text>
+                <div style={{ marginTop: 12 }}>
+                  <Text strong style={{ color: '#fff', fontSize: 18 }}>
+                    {projectInfo.currentManpowerCost?.toFixed(2) || '-'}
+                  </Text>
+                  <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}> 万元</Text>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={12} sm={6}>
+              <Card
+                style={{
+                  borderRadius: 16,
+                  textAlign: 'center',
+                  background: 'linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)',
+                  border: 'none',
+                }}
+              >
+                <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}>DevOps进度</Text>
+                <div style={{ marginTop: 12 }}>
+                  <Text strong style={{ color: '#fff', fontSize: 18 }}>
+                    {projectInfo.devopsProgress?.toFixed(1) || '-'}
+                  </Text>
+                  <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}> %</Text>
+                </div>
+              </Card>
+            </Col>
+          </Row>
+
+          {/* 可编辑的项目信息表单 */}
+          <Form form={form} layout="vertical" style={{ marginTop: 24 }}>
             <Row gutter={28}>
-              <Col xs={24} md={8}>
+              <Col xs={24} md={6}>
                 <Form.Item label="项目名称" name="projectName">
                   <Input placeholder="请输入项目名称" style={{ borderRadius: 10 }} />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={8}>
+              <Col xs={24} md={6}>
                 <Form.Item label="合同金额(万元)" name="contractAmount">
                   <InputNumber
                     placeholder="请输入合同金额"
@@ -602,7 +751,7 @@ export default function CostDeviationInput() {
                   />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={8}>
+              <Col xs={24} md={6}>
                 <Form.Item label="当前人力成本(万元)" name="currentManpowerCost">
                   <InputNumber
                     placeholder="请输入人力成本"
@@ -612,31 +761,79 @@ export default function CostDeviationInput() {
                   />
                 </Form.Item>
               </Col>
+              <Col xs={24} md={6}>
+                <Form.Item label="DevOps进度(%)" name="taskProgress">
+                  <InputNumber
+                    placeholder="请输入进度"
+                    min={0}
+                    max={100}
+                    precision={1}
+                    style={{ width: '100%', borderRadius: 10 }}
+                  />
+                </Form.Item>
+              </Col>
             </Row>
-
-            <Form.Item label="任务完成进度(%)" name="taskProgress">
-              <InputNumber
-                placeholder="请输入任务进度"
-                min={0}
-                max={100}
-                precision={1}
-                style={{ width: 300, borderRadius: 10 }}
-              />
-            </Form.Item>
-
-            {/* 项目成员信息表格 */}
-            {recognitionResult.members && recognitionResult.members.length > 0 && (
-              <Form.Item label="项目成员信息">
-                <Table
-                  columns={memberColumns}
-                  dataSource={recognitionResult.members}
-                  rowKey="name"
-                  pagination={false}
-                  size="small"
-                />
-              </Form.Item>
-            )}
           </Form>
+        </Card>
+      )}
+
+      {/* 人员清单模块 */}
+      {recognitionResult && !recognizing && (
+        <Card
+          style={{
+            borderRadius: 24,
+            marginBottom: 32,
+            border: '1px solid var(--color-border-light)',
+          }}
+        >
+          <div style={{ marginBottom: 24 }}>
+            <Title level={4} style={{ marginBottom: 8, fontWeight: 600 }}>
+              <TeamOutlined style={{ marginRight: 10, color: '#F59E0B' }} />
+              人员清单
+            </Title>
+            <Text type="secondary" style={{ fontSize: 14 }}>管理项目团队成员信息，可新增、修改或删除成员</Text>
+          </div>
+
+          <Table
+            columns={memberColumns}
+            dataSource={members}
+            rowKey="key"
+            pagination={false}
+            locale={{ emptyText: '暂无成员，请点击添加' }}
+            summary={() =>
+              members.length > 0 ? (
+                <Table.Summary fixed>
+                  <Table.Summary.Row>
+                    <Table.Summary.Cell index={0}>
+                      <Text strong>合计</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1}>
+                      <Text>{members.length} 人</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} />
+                    <Table.Summary.Cell index={3} />
+                    <Table.Summary.Cell index={4}>
+                      <Text strong style={{ color: '#3B82F6' }}>
+                        {members.reduce((sum, m) => sum + (m.reportedHours || 0), 0).toFixed(1)} 小时
+                      </Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={5} />
+                  </Table.Summary.Row>
+                </Table.Summary>
+              ) : null
+            }
+          />
+
+          <div style={{ marginTop: 16 }}>
+            <Button
+              type="dashed"
+              icon={<PlusOutlined />}
+              onClick={handleAddMember}
+              style={{ borderRadius: 10 }}
+            >
+              新增成员
+            </Button>
+          </div>
         </Card>
       )}
 

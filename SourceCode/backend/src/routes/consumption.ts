@@ -168,19 +168,132 @@ const calculateBurnoutDate = (
 // ==================== 路由定义 ====================
 
 /**
+ * GET /project/:projectCode - 根据项目编号查询项目信息
+ */
+router.get('/project/:projectCode', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest
+    const { projectCode } = req.params
+    const userId = authReq.userId
+
+    // 查询项目
+    const project = await prisma.project.findFirst({
+      where: { projectCode: String(projectCode), userId },
+      include: {
+        members: true,
+        costs: true
+      }
+    })
+
+    if (!project) {
+      return sendError(res, 404, '项目不存在')
+    }
+
+    // 获取成本信息
+    const projectCost = project.costs[0]
+
+    // 返回项目信息和人员列表
+    const response = {
+      projectId: project.id,
+      projectCode: project.projectCode,
+      projectName: project.projectName,
+      contractAmount: project.contractAmount || 0,
+      preSaleRatio: project.preSaleRatio || projectCost?.preSaleRatio || 0,
+      taxRate: project.taxRate || projectCost?.taxRate || 0.06,
+      externalLaborCost: project.externalLaborCost || projectCost?.externalLaborCost || 0,
+      externalSoftwareCost: project.externalSoftwareCost || projectCost?.externalSoftwareCost || 0,
+      otherCost: project.otherCost || projectCost?.otherCost || 0,
+      currentManpowerCost: project.currentManpowerCost || projectCost?.currentManpowerCost || 0,
+      devopsProgress: project.devopsProgress || 0,
+      members: project.members.map((m: { id: number; name: string; department: string | null; level: string; dailyCost: number; role: string | null; entryTime: Date | null; leaveTime: Date | null; isToEnd: boolean; reportedHours: number | null }) => ({
+        memberId: m.id,
+        name: m.name,
+        department: m.department || undefined,
+        level: m.level,
+        dailyCost: m.dailyCost,
+        role: m.role,
+        entryTime: m.entryTime?.toISOString() || null,
+        leaveTime: m.leaveTime?.toISOString() || null,
+        isToEnd: m.isToEnd,
+        reportedHours: m.reportedHours
+      }))
+    }
+
+    sendResponse(res, response, '查询成功')
+  } catch (error) {
+    console.error('Query project error:', error)
+    sendError(res, 500, '查询项目失败')
+  }
+})
+
+/**
+ * POST /:projectId/save-members - 保存项目人员信息
+ */
+router.post('/:projectId/save-members', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest
+    const { projectId } = req.params
+    const userId = authReq.userId
+    const { members } = req.body
+
+    if (!await verifyProjectOwnership(Number(projectId), userId)) {
+      return sendError(res, 403, '无权访问该项目')
+    }
+
+    if (!members || !Array.isArray(members)) {
+      return sendError(res, 400, '请提供成员信息')
+    }
+
+    // 删除现有成员
+    await prisma.projectMember.deleteMany({
+      where: { projectId: Number(projectId) }
+    })
+
+    // 创建新成员
+    for (const member of members) {
+      // 处理"至结项"情况
+      let leaveTime = member.leaveTime ? new Date(member.leaveTime) : null
+      if (member.isToEnd) {
+        leaveTime = new Date('2099-12-31')
+      }
+
+      await prisma.projectMember.create({
+        data: {
+          projectId: Number(projectId),
+          name: member.name,
+          department: member.department || null,
+          level: member.level,
+          dailyCost: member.dailyCost,
+          role: member.role || null,
+          entryTime: member.entryTime ? new Date(member.entryTime) : null,
+          leaveTime: leaveTime,
+          isToEnd: member.isToEnd || false,
+          reportedHours: member.reportedHours || null
+        }
+      })
+    }
+
+    sendResponse(res, { projectId: Number(projectId), memberCount: members.length }, '人员信息保存成功')
+  } catch (error) {
+    console.error('Save members error:', error)
+    sendError(res, 500, '人员信息保存失败')
+  }
+})
+
+/**
  * POST /ocr - OCR识别OA截图（真实调用 AI 服务）
  */
-router.post('/ocr', authMiddleware, upload.single('image'), async (req: Request, res: Response) => {
+router.post('/ocr', authMiddleware, upload.array('files', 10), async (req: Request, res: Response) => {
   try {
     const authReq = req as AuthenticatedRequest
     const userId = authReq.userId
-    const file = req.file
+    const files = req.files as Express.Multer.File[]
 
-    if (!file) {
+    if (!files || files.length === 0) {
       return sendError(res, 400, '请上传截图文件')
     }
 
-    console.log(`[Consumption] 收到OCR识别请求，文件: ${file.originalname}`)
+    console.log(`[Consumption] 收到OCR识别请求，文件数: ${files.length}`)
 
     // 创建项目
     const project = await prisma.project.create({
@@ -192,15 +305,48 @@ router.post('/ocr', authMiddleware, upload.single('image'), async (req: Request,
       }
     })
 
-    // 真实 OCR 识别
-    const filePath = path.join(uploadDir, file.filename)
-    const ocrResult = await performOcrRecognition(filePath)
+    // 合并多文件的OCR识别结果
+    let mergedOcrResult = {
+      contractAmount: 0,
+      preSaleRatio: 0,
+      taxRate: 0.06,
+      externalLaborCost: 0,
+      externalSoftwareCost: 0,
+      currentManpowerCost: 0,
+      members: [] as any[],
+      rawText: ''
+    }
 
-    console.log(`[Consumption] OCR识别结果: 合同金额=${ocrResult.contractAmount}, 人力成本=${ocrResult.currentManpowerCost}`)
+    for (const file of files) {
+      const filePath = path.join(uploadDir, file.filename)
+      const ocrResult = await performOcrRecognition(filePath)
+
+      // 合并结果：取最大值或累加
+      mergedOcrResult.contractAmount = Math.max(mergedOcrResult.contractAmount, ocrResult.contractAmount || 0)
+      mergedOcrResult.preSaleRatio = Math.max(mergedOcrResult.preSaleRatio, ocrResult.preSaleRatio || 0)
+      mergedOcrResult.taxRate = Math.max(mergedOcrResult.taxRate, ocrResult.taxRate || 0)
+      mergedOcrResult.externalLaborCost = Math.max(mergedOcrResult.externalLaborCost, ocrResult.externalLaborCost || 0)
+      mergedOcrResult.externalSoftwareCost = Math.max(mergedOcrResult.externalSoftwareCost, ocrResult.externalSoftwareCost || 0)
+      mergedOcrResult.currentManpowerCost = Math.max(mergedOcrResult.currentManpowerCost, ocrResult.currentManpowerCost || 0)
+      mergedOcrResult.rawText += (ocrResult.rawText || '') + '\n'
+
+      // 合并成员列表
+      if (ocrResult.memberInfo && ocrResult.memberInfo.length > 0) {
+        for (const member of ocrResult.memberInfo) {
+          // 检查是否已存在同名成员
+          const existingMember = mergedOcrResult.members.find(m => m.name === member.name)
+          if (!existingMember) {
+            mergedOcrResult.members.push(member)
+          }
+        }
+      }
+    }
+
+    console.log(`[Consumption] OCR识别结果: 合同金额=${mergedOcrResult.contractAmount}, 人力成本=${mergedOcrResult.currentManpowerCost}`)
 
     // 根据识别结果创建成员
-    if (ocrResult.memberInfo && ocrResult.memberInfo.length > 0) {
-      for (const member of ocrResult.memberInfo) {
+    if (mergedOcrResult.members.length > 0) {
+      for (const member of mergedOcrResult.members) {
         // 根据职级设置默认日成本
         const dailyCostMap = { P5: 0.08, P6: 0.1, P7: 0.15, P8: 0.2 }
         const dailyCost = dailyCostMap[member.level as keyof typeof dailyCostMap] || 0.1
@@ -213,26 +359,34 @@ router.post('/ocr', authMiddleware, upload.single('image'), async (req: Request,
             dailyCost,
             role: member.role,
             reportedHours: member.reportedHours,
-            entryTime: ocrResult.projectInfo.startDate ? new Date(ocrResult.projectInfo.startDate) : null
+            entryTime: new Date() // 默认今天入场
           }
         })
       }
     }
 
-    const response: OcrResult & { projectId: number; contractAmount?: number; preSaleRatio?: number; taxRate?: number; externalLaborCost?: number; externalSoftwareCost?: number; currentManpowerCost?: number } = {
-      ...ocrResult,
+    const response = {
       projectId: project.id,
       projectInfo: {
-        ...ocrResult.projectInfo,
-        projectName: ocrResult.projectInfo.projectName || project.projectName
+        projectName: project.projectName,
+        projectManager: '',
+        startDate: dayjs().format('YYYY-MM-DD'),
+        endDate: dayjs().add(1, 'year').format('YYYY-MM-DD'),
+        status: '进行中'
       },
-      // 添加财务数据
-      contractAmount: ocrResult.contractAmount,
-      preSaleRatio: ocrResult.preSaleRatio,
-      taxRate: ocrResult.taxRate,
-      externalLaborCost: ocrResult.externalLaborCost,
-      externalSoftwareCost: ocrResult.externalSoftwareCost,
-      currentManpowerCost: ocrResult.currentManpowerCost
+      memberInfo: mergedOcrResult.members.map(m => ({
+        name: m.name || '',
+        level: m.level || 'P5',
+        role: m.role || '',
+        reportedHours: m.reportedHours || 0
+      })),
+      contractAmount: mergedOcrResult.contractAmount,
+      preSaleRatio: mergedOcrResult.preSaleRatio,
+      taxRate: mergedOcrResult.taxRate,
+      externalLaborCost: mergedOcrResult.externalLaborCost,
+      externalSoftwareCost: mergedOcrResult.externalSoftwareCost,
+      currentManpowerCost: mergedOcrResult.currentManpowerCost,
+      rawText: 'OCR识别完成'
     }
 
     sendResponse(res, response, 'OCR识别成功')
@@ -359,6 +513,7 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
     const taxRate = projectCost.taxRate
     const externalLaborCost = projectCost.externalLaborCost
     const externalSoftwareCost = projectCost.externalSoftwareCost
+    const otherCost = projectCost.otherCost || 0  // 新增：其它成本
 
     // 售前成本
     const preSaleCost = contractAmount * preSaleRatio
@@ -366,8 +521,8 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
     // 税金
     const taxCost = contractAmount * taxRate
 
-    // 可用于项目实施的金额
-    const implementationBudget = contractAmount - preSaleCost - taxCost - externalLaborCost - externalSoftwareCost
+    // 可用于项目实施的金额（新增 otherCost 减项）
+    const implementationBudget = contractAmount - preSaleCost - taxCost - externalLaborCost - externalSoftwareCost - otherCost
 
     // 当前人力成本
     const currentManpowerCost = await calculateCurrentManpowerCost(Number(projectId))
@@ -378,7 +533,7 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
     // 可消耗成本
     const availableCost = implementationBudget - currentManpowerCost
 
-    // 可消耗天数
+    // 可消耗天数（保留整数）
     const availableDays = dailyManpowerCost > 0 ? Math.floor(availableCost / dailyManpowerCost) : 0
 
     // 燃尽日期
@@ -392,6 +547,7 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
     await prisma.projectCost.update({
       where: { id: projectCost.id },
       data: {
+        otherCost,
         currentManpowerCost,
         availableCost,
         dailyManpowerCost,
@@ -408,15 +564,20 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
       return {
         id: member.id,
         name: member.name,
+        department: member.department,
         level: member.level,
         dailyCost: member.dailyCost,
         role: member.role,
         entryTime: member.entryTime?.toISOString() || null,
         leaveTime: member.leaveTime?.toISOString() || null,
+        isToEnd: member.isToEnd,
         reportedHours: member.reportedHours,
         totalCost
       }
     })
+
+    // 燃尽日期仅返回年月日格式
+    const burnoutDateStr = burnoutDate ? dayjs(burnoutDate).format('YYYY-MM-DD') : null
 
     const response: ConsumptionResult = {
       contractAmount,
@@ -424,11 +585,12 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
       taxRate,
       externalLaborCost,
       externalSoftwareCost,
+      otherCost,
       currentManpowerCost,
       availableCost,
       dailyManpowerCost,
       availableDays,
-      burnoutDate: burnoutDate?.toISOString() || null,
+      burnoutDate: burnoutDateStr,
       members: memberCostDetails
     }
 
@@ -525,11 +687,13 @@ router.post('/:projectId/members', authMiddleware, async (req: Request, res: Res
       return {
         id: member.id,
         name: member.name,
+        department: member.department,
         level: member.level,
         dailyCost: member.dailyCost,
         role: member.role,
         entryTime: member.entryTime?.toISOString() || null,
         leaveTime: member.leaveTime?.toISOString() || null,
+        isToEnd: member.isToEnd,
         reportedHours: member.reportedHours,
         totalCost
       }
@@ -573,11 +737,13 @@ router.get('/:projectId/result', authMiddleware, async (req: Request, res: Respo
       return {
         id: member.id,
         name: member.name,
+        department: member.department,
         level: member.level,
         dailyCost: member.dailyCost,
         role: member.role,
         entryTime: member.entryTime?.toISOString() || null,
         leaveTime: member.leaveTime?.toISOString() || null,
+        isToEnd: member.isToEnd,
         reportedHours: member.reportedHours,
         totalCost
       }
@@ -589,11 +755,12 @@ router.get('/:projectId/result', authMiddleware, async (req: Request, res: Respo
       taxRate: projectCost.taxRate,
       externalLaborCost: projectCost.externalLaborCost,
       externalSoftwareCost: projectCost.externalSoftwareCost,
+      otherCost: projectCost.otherCost || 0,
       currentManpowerCost: projectCost.currentManpowerCost,
       availableCost: projectCost.availableCost,
       dailyManpowerCost: projectCost.dailyManpowerCost,
       availableDays: projectCost.availableDays,
-      burnoutDate: projectCost.burnoutDate?.toISOString() || null,
+      burnoutDate: projectCost.burnoutDate ? dayjs(projectCost.burnoutDate).format('YYYY-MM-DD') : null,
       members: memberCostDetails
     }
 

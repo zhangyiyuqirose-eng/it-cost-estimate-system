@@ -255,16 +255,19 @@ export interface SaveProjectInfoRequest {
   taxRate?: number
   externalLaborCost?: number
   externalSoftwareCost?: number
+  otherCost?: number
   members: ProjectMemberInput[]
 }
 
 export interface ProjectMemberInput {
   name: string
+  department?: string
   level: 'P5' | 'P6' | 'P7' | 'P8'
   dailyCost: number
   role?: string
   entryTime?: string
   leaveTime?: string
+  isToEnd?: boolean
   reportedHours?: number
 }
 
@@ -278,6 +281,7 @@ export interface ConsumptionResult {
   taxRate: number
   externalLaborCost: number
   externalSoftwareCost: number
+  otherCost: number
   currentManpowerCost: number
   availableCost: number
   dailyManpowerCost: number
@@ -289,11 +293,13 @@ export interface ConsumptionResult {
 export interface MemberCostDetail {
   id: number
   name: string
+  department: string | null
   level: string
   dailyCost: number
   role: string | null
   entryTime: string | null
   leaveTime: string | null
+  isToEnd?: boolean
   reportedHours: number | null
   totalCost: number
 }

@@ -154,11 +154,13 @@ export interface CalculationTrace {
 // 成本消耗预估相关类型
 export interface CostConsumption {
   projectId: number
+  projectCode?: string
   contractAmount: number
   preSaleRatio: number
   taxRate: number
   externalLaborCost: number
   externalSoftwareCost: number
+  otherCost: number
   currentManpowerCost: number
   teamMembers: TeamMember[]
   availableCost: number
@@ -168,12 +170,14 @@ export interface CostConsumption {
 }
 
 export interface TeamMember {
-  memberId: number
+  memberId?: number
   name: string
+  department?: string
   level: MemberLevel
   dailyCost: number
   entryTime?: string
   leaveTime?: string
+  isToEnd?: boolean
   reportedHours?: number
 }
 
@@ -190,8 +194,10 @@ export const MEMBER_LEVEL_DAILY_COST: Record<MemberLevel, number> = {
 // 成本偏差监控相关类型
 export interface CostDeviation {
   projectId: number
+  projectName?: string
   totalContractAmount: number
   currentCostConsumption: number
+  devopsProgress?: number
   taskProgress: number
   costDeviation: number
   expectedStages: StageCost[]

@@ -120,15 +120,15 @@ function StatCard({ title, value, suffix, precision, icon, color, gradient, stat
         <Text
           strong
           style={{
-            fontSize: 28,
+            fontSize: 32,  // 字体放大
             color,
             fontWeight: 700,
           }}
         >
-          {typeof value === 'number' && precision ? value.toFixed(precision) : value}
+          {typeof value === 'number' && precision !== undefined ? value.toFixed(precision) : value}
         </Text>
         {suffix && (
-          <Text type="secondary" style={{ fontSize: 13, marginLeft: 4 }}>
+          <Text type="secondary" style={{ fontSize: 14, marginLeft: 4 }}>
             {suffix}
           </Text>
         )}
@@ -530,7 +530,7 @@ export default function CostConsumptionResult() {
 
       {/* 核心指标卡片 */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={12} sm={6}>
+        <Col xs={12} sm={6} lg={4}>
           <StatCard
             title="可消耗成本"
             value={result.availableCost}
@@ -542,7 +542,7 @@ export default function CostConsumptionResult() {
             status={isOverBudget ? 'error' : 'success'}
           />
         </Col>
-        <Col xs={12} sm={6}>
+        <Col xs={12} sm={6} lg={4}>
           <StatCard
             title="日人力成本"
             value={result.dailyManpowerCost}
@@ -553,21 +553,31 @@ export default function CostConsumptionResult() {
             gradient="linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)"
           />
         </Col>
-        <Col xs={12} sm={6}>
+        <Col xs={12} sm={6} lg={4}>
+          <StatCard
+            title="其它成本"
+            value={result.otherCost || 0}
+            suffix="万元"
+            precision={2}
+            icon={<DollarOutlined />}
+            color="#64748b"
+            gradient="linear-gradient(135deg, #64748b 0%, #94a3b8 100%)"
+          />
+        </Col>
+        <Col xs={12} sm={6} lg={4}>
           <StatCard
             title="可消耗天数"
-            value={result.availableDays}
+            value={Math.floor(result.availableDays)}
             suffix="天"
-            precision={1}
             icon={<CalendarOutlined />}
             color={result.availableDays > 0 ? '#10B981' : '#EF4444'}
             gradient="linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)"
           />
         </Col>
-        <Col xs={12} sm={6}>
+        <Col xs={12} sm={6} lg={4}>
           <StatCard
             title="燃尽日期"
-            value={result.burnoutDate || '-'}
+            value={result.burnoutDate ? dayjs(result.burnoutDate).format('YYYY-MM-DD') : '-'}
             icon={<FireOutlined />}
             color={result.burnoutDate ? '#F59E0B' : '#64748b'}
             gradient="linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)"
@@ -630,14 +640,12 @@ export default function CostConsumptionResult() {
               style={{
                 padding: 20,
                 borderRadius: 12,
-                background: '#f8fafc',
-                border: '1px solid #f1f5f9',
               }}
             >
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
                 可消耗成本
               </Text>
-              <Text code style={{ fontSize: 13 }}>
+              <Text strong style={{ fontSize: 16, color: '#0f172a' }}>
                 合同金额 × (1 - 售前比例) × (1 - 税率) - 外采成本 - 当前人力成本
               </Text>
             </div>
@@ -647,14 +655,12 @@ export default function CostConsumptionResult() {
               style={{
                 padding: 20,
                 borderRadius: 12,
-                background: '#f8fafc',
-                border: '1px solid #f1f5f9',
               }}
             >
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
                 日人力成本
               </Text>
-              <Text code style={{ fontSize: 13 }}>
+              <Text strong style={{ fontSize: 16, color: '#0f172a' }}>
                 Σ(成员日成本) = P5:0.16, P6:0.21, P7:0.26, P8:0.36 万/天
               </Text>
             </div>
@@ -664,14 +670,12 @@ export default function CostConsumptionResult() {
               style={{
                 padding: 20,
                 borderRadius: 12,
-                background: '#f8fafc',
-                border: '1px solid #f1f5f9',
               }}
             >
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
                 可消耗天数
               </Text>
-              <Text code style={{ fontSize: 13 }}>
+              <Text strong style={{ fontSize: 16, color: '#0f172a' }}>
                 可消耗成本 / 日人力成本
               </Text>
             </div>
@@ -681,14 +685,12 @@ export default function CostConsumptionResult() {
               style={{
                 padding: 20,
                 borderRadius: 12,
-                background: '#f8fafc',
-                border: '1px solid #f1f5f9',
               }}
             >
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
                 燃尽日期
               </Text>
-              <Text code style={{ fontSize: 13 }}>
+              <Text strong style={{ fontSize: 16, color: '#0f172a' }}>
                 当前日期 + 可消耗天数
               </Text>
             </div>

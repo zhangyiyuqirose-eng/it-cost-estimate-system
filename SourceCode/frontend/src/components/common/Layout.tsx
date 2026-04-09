@@ -235,10 +235,10 @@ function Layout() {
           </div>
           <div>
             <Text strong style={{ fontSize: 18, color: '#0f172a', letterSpacing: '-0.02em' }}>
-              数字员工
+              IT项目智能
             </Text>
             <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: -2 }}>
-              成本智能管控平台
+              成本管控平台
             </Text>
           </div>
         </div>

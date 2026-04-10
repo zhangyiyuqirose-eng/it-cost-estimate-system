@@ -8,6 +8,24 @@ import ExcelJS from 'exceljs'
 import prisma from '../config/database'
 import { authMiddleware } from '../middlewares/auth'
 import aiService from '../services/aiService'
+
+/**
+ * 修复中文文件名乱码问题
+ * multer 接收的 file.originalname 可能是 latin1 编码，需要转换为 utf8
+ */
+function decodeFilename(filename: string): string {
+  try {
+    // 尝试从 latin1 转换为 utf8
+    const decoded = Buffer.from(filename, 'latin1').toString('utf8')
+    // 如果解码后包含乱码特征（如  或 ），则返回原文件名
+    if (decoded.includes('') || decoded.includes('')) {
+      return filename
+    }
+    return decoded
+  } catch {
+    return filename
+  }
+}
 import {
   ApiResponse,
   UploadDocumentResponse,
@@ -43,7 +61,11 @@ const storage = multer.diskStorage({
     cb(null, uploadDir)
   },
   filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`
+    // 解码文件名，修复中文乱码
+    const decodedName = decodeFilename(file.originalname)
+    const uniqueName = `${uuidv4()}${path.extname(decodedName)}`
+    // 将解码后的文件名存储到 file 对象中
+    file.originalname = decodedName
     cb(null, uniqueName)
   }
 })
@@ -51,8 +73,11 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
+    // 先解码文件名
+    const decodedName = decodeFilename(file.originalname)
+    file.originalname = decodedName
     const allowedExtensions = ['.doc', '.docx']
-    const ext = path.extname(file.originalname).toLowerCase()
+    const ext = path.extname(decodedName).toLowerCase()
     if (allowedExtensions.includes(ext)) {
       cb(null, true)
     } else {
@@ -286,6 +311,15 @@ router.post('/:projectId/parse', authMiddleware, async (req: Request, res: Respo
       rawText: text.substring(0, 5000),
       projectName: aiResult.project_name || document.docName.replace(/\.(doc|docx)$/i, ''),
       systemName: aiResult.system_name || ''
+    }
+
+    // 如果 AI 成功提取了项目名称，更新项目表中的项目名称
+    if (aiResult.project_name && aiResult.project_name.trim()) {
+      await prisma.project.update({
+        where: { id: Number(projectId) },
+        data: { projectName: aiResult.project_name.trim() }
+      })
+      console.log(`[Parse] 更新项目名称: ${aiResult.project_name}`)
     }
 
     // 更新解析结果

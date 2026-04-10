@@ -1,6 +1,7 @@
-# PaddleOCR 服务依赖
-paddleocr>=2.7.0
-paddlepaddle>=2.5.0
+# EasyOCR 服务依赖
+easyocr>=1.7.0
+torch>=2.0.0
+torchvision>=0.15.0
 fastapi>=0.100.0
 uvicorn>=0.23.0
 python-multipart>=0.0.6

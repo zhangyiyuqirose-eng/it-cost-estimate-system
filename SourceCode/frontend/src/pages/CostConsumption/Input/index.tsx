@@ -18,7 +18,6 @@ import {
   Tag,
   Tooltip,
   Checkbox,
-  Spin,
 } from 'antd'
 import {
   InboxOutlined,
@@ -535,42 +534,6 @@ export default function CostConsumptionInput() {
       >
         <Steps current={currentStep} items={stepItems} />
       </Card>
-
-      {/* 功能介绍区域 */}
-      <div
-        style={{
-          background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
-          borderRadius: 24,
-          padding: '48px 48px',
-          marginBottom: 32,
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 28 }}>
-          <div
-            style={{
-              width: 68,
-              height: 68,
-              borderRadius: 18,
-              background: 'rgba(255, 255, 255, 0.18)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <DollarOutlined style={{ fontSize: 32, color: '#fff' }} />
-          </div>
-          <div>
-            <Title level={3} style={{ color: '#fff', margin: 0, marginBottom: 10 }}>
-              成本消耗预估
-            </Title>
-            <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 15, lineHeight: 1.6 }}>
-              上传OA截图智能识别，实时追踪成本消耗，预测燃尽时间
-            </Text>
-          </div>
-        </div>
-      </div>
 
       {/* OA截图上传区域 */}
       <Card

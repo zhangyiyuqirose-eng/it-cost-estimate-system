@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import {
   Card,
   Typography,
@@ -17,8 +16,6 @@ import {
   Spin,
 } from 'antd'
 import {
-  TeamOutlined,
-  PlusOutlined,
   DeleteOutlined,
   EditOutlined,
   SearchOutlined,
@@ -30,7 +27,7 @@ import { projectApi } from '@/api'
 import { MEMBER_LEVEL_DAILY_COST } from '@/types'
 import type { MemberLevel } from '@/types'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 // 成员等级选项
 const levelOptions: { value: MemberLevel; label: string }[] = [
@@ -58,7 +55,6 @@ interface MemberData {
 }
 
 export default function CostDeviationMemberList() {
-  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [members, setMembers] = useState<MemberData[]>([])
   const [searchText, setSearchText] = useState('')
@@ -137,13 +133,6 @@ export default function CostDeviationMemberList() {
       leaveTime: member.leaveTime ? dayjs(member.leaveTime) : null,
       isToEnd: member.isToEnd,
     })
-    setModalVisible(true)
-  }
-
-  // 打开新增模态框
-  const handleAdd = () => {
-    setEditingMember(null)
-    form.resetFields()
     setModalVisible(true)
   }
 
@@ -304,40 +293,6 @@ export default function CostDeviationMemberList() {
 
   return (
     <div className="page-container">
-      {/* 功能介绍区域 */}
-      <div
-        style={{
-          background: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
-          borderRadius: 24,
-          padding: '48px 48px',
-          marginBottom: 32,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          <div
-            style={{
-              width: 68,
-              height: 68,
-              borderRadius: 18,
-              background: 'rgba(255, 255, 255, 0.18)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <TeamOutlined style={{ fontSize: 32, color: '#fff' }} />
-          </div>
-          <div>
-            <Title level={3} style={{ color: '#fff', margin: 0, marginBottom: 10 }}>
-              项目人员清单
-            </Title>
-            <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 15 }}>
-              查看和管理所有项目团队成员信息
-            </Text>
-          </div>
-        </div>
-      </div>
-
       {/* 搜索和筛选 */}
       <Card
         style={{

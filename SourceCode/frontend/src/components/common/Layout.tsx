@@ -76,6 +76,8 @@ const breadcrumbMap: Record<string, string> = {
   '/dashboard': '首页',
   '/cost-estimate': '成本预估',
   '/cost-estimate/upload': '数据上传',
+  '/cost-estimate/project-info': '项目信息',
+  '/cost-estimate/ai-analysis': 'AI分析',
   '/cost-estimate/config': '参数配置',
   '/cost-estimate/result': '预估结果',
   '/cost-consumption': '成本消耗',

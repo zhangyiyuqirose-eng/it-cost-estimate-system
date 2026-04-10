@@ -22,6 +22,7 @@ import {
   SettingOutlined,
   FileSearchOutlined,
   BarChartOutlined,
+  InfoCircleOutlined,
   ReloadOutlined,
   DownloadOutlined,
   CheckCircleOutlined,
@@ -44,7 +45,7 @@ import type {
 
 const { Title, Text } = Typography
 
-// 步骤条配置（4步）- 调整顺序：上传->解析->配置->结果
+// 步骤条配置（5步）：文件上传->项目信息->AI分析->参数配置->结果报告
 const stepItems = [
   {
     title: '文件上传',
@@ -52,8 +53,13 @@ const stepItems = [
     icon: <FileTextOutlined />,
   },
   {
-    title: '文档解析',
-    description: '查看功能点详情',
+    title: '项目信息',
+    description: '填写项目基本信息',
+    icon: <InfoCircleOutlined />,
+  },
+  {
+    title: 'AI分析',
+    description: '解析功能模块',
     icon: <FileSearchOutlined />,
   },
   {
@@ -62,7 +68,7 @@ const stepItems = [
     icon: <SettingOutlined />,
   },
   {
-    title: '结果展示',
+    title: '结果报告',
     description: '查看成本预估',
     icon: <BarChartOutlined />,
   },
@@ -123,7 +129,7 @@ export default function CostEstimateResult() {
   const [searchParams] = useSearchParams()
   const projectId = searchParams.get('projectId')
 
-  const [currentStep] = useState(3)
+  const [currentStep] = useState(4)
   const [loading, setLoading] = useState(true)
   const [recalculating, setRecalculating] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -910,7 +916,7 @@ export default function CostEstimateResult() {
           <Button
             type="primary"
             size="large"
-            onClick={() => navigate(`/cost-estimate/parse-result?projectId=${projectId}`)}
+            onClick={() => navigate(`/cost-estimate/ai-analysis?projectId=${projectId}`)}
             style={{
               borderRadius: 12,
               height: 44,
@@ -918,7 +924,7 @@ export default function CostEstimateResult() {
               border: 'none',
             }}
           >
-            前往解析结果
+            前往AI分析
           </Button>
         </Card>
       </div>

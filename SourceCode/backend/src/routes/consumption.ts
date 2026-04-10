@@ -18,6 +18,24 @@ import {
 } from '../types'
 import { aiService } from '../services/aiService'
 
+/**
+ * 修复中文文件名乱码问题
+ * multer 接收的 file.originalname 可能是 latin1 编码，需要转换为 utf8
+ */
+function decodeFilename(filename: string): string {
+  try {
+    // 尝试从 latin1 转换为 utf8
+    const decoded = Buffer.from(filename, 'latin1').toString('utf8')
+    // 如果解码后包含乱码特征，则返回原文件名
+    if (decoded.includes('') || decoded.includes('')) {
+      return filename
+    }
+    return decoded
+  } catch {
+    return filename
+  }
+}
+
 const router = Router()
 
 // ==================== 文件上传配置 ====================
@@ -33,7 +51,10 @@ const storage = multer.diskStorage({
     cb(null, uploadDir)
   },
   filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`
+    // 解码文件名，修复中文乱码
+    const decodedName = decodeFilename(file.originalname)
+    file.originalname = decodedName
+    const uniqueName = `${uuidv4()}${path.extname(decodedName)}`
     cb(null, uniqueName)
   }
 })
@@ -41,8 +62,11 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
+    // 先解码文件名
+    const decodedName = decodeFilename(file.originalname)
+    file.originalname = decodedName
     const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp']
-    const ext = path.extname(file.originalname).toLowerCase()
+    const ext = path.extname(decodedName).toLowerCase()
     if (allowedExtensions.includes(ext)) {
       cb(null, true)
     } else {

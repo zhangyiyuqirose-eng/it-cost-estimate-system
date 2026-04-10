@@ -2,8 +2,6 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/common/Layout'
 import Dashboard from './pages/Dashboard'
 import CostEstimateUpload from './pages/CostEstimate/Upload'
-import CostEstimateProjectInfo from './pages/CostEstimate/ProjectInfo'
-import CostEstimateAIAnalysis from './pages/CostEstimate/AIAnalysis'
 import CostEstimateConfig from './pages/CostEstimate/Config'
 import CostEstimateResult from './pages/CostEstimate/Result'
 import CostConsumptionInput from './pages/CostConsumption/Input'
@@ -25,11 +23,9 @@ function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
 
-        {/* 实施成本预估（5步流程） */}
+        {/* 实施成本预估（3步流程） */}
         <Route path="cost-estimate">
           <Route path="upload" element={<CostEstimateUpload />} />
-          <Route path="project-info" element={<CostEstimateProjectInfo />} />
-          <Route path="ai-analysis" element={<CostEstimateAIAnalysis />} />
           <Route path="config" element={<CostEstimateConfig />} />
           <Route path="result" element={<CostEstimateResult />} />
         </Route>

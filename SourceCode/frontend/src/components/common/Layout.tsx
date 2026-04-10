@@ -57,6 +57,7 @@ const navConfig = [
     children: [
       { key: '/cost-deviation/input', label: '数据输入', icon: '🔍' },
       { key: '/cost-deviation/result', label: '偏差分析', icon: '📉' },
+      { key: '/cost-deviation/member-list', label: '项目人员清单', icon: '👥' },
     ],
   },
   {
@@ -83,6 +84,7 @@ const breadcrumbMap: Record<string, string> = {
   '/cost-deviation': '偏差监控',
   '/cost-deviation/input': '数据输入',
   '/cost-deviation/result': '偏差分析',
+  '/cost-deviation/member-list': '项目人员清单',
   '/project': '项目管理',
   '/project/list': '项目列表',
   '/user': '个人设置',

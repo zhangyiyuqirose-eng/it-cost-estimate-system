@@ -277,7 +277,13 @@ export default function CostConsumptionInput() {
       render: (value: string, record) => (
         <Input
           value={value}
-          onChange={(e) => handleMemberChange(record.key, 'name', e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value
+            // 允许中文、"."、字母、数字，最多10个字符（支持少数民族姓名中的中文"."）
+            if (/^[\u4e00-\u9fa5.a-zA-Z0-9]{0,10}$/.test(val) || val === '') {
+              handleMemberChange(record.key, 'name', val)
+            }
+          }}
           placeholder="请输入姓名"
           maxLength={10}
           style={{ width: '100%', borderRadius: 8 }}
@@ -433,14 +439,40 @@ export default function CostConsumptionInput() {
   // 开始核算
   const handleCalculate = async () => {
     try {
-      // 验证表单
+      // 验证表单（包含所有必填项）
       const formValues = await form.validateFields()
+
+      // 验证合同金额大于0
+      if (!formValues.contractAmount || formValues.contractAmount <= 0) {
+        message.error('合同金额必须大于0')
+        return
+      }
+
+      // 验证售前比例范围
+      if (formValues.preSaleRatio < 0 || formValues.preSaleRatio > 1) {
+        message.error('售前比例必须在0-1之间')
+        return
+      }
+
+      // 验证税率范围
+      if (formValues.taxRate < 0 || formValues.taxRate > 1) {
+        message.error('税率必须在0-1之间')
+        return
+      }
 
       // 验证成员数据
       const validMembers = members.filter((m) => m.name && m.level)
       if (validMembers.length === 0) {
         message.warning('请至少添加一名有效成员')
         return
+      }
+
+      // 验证每个成员的姓名不能为空
+      for (const member of validMembers) {
+        if (!member.name || member.name.trim() === '') {
+          message.error('成员姓名不能为空')
+          return
+        }
       }
 
       setSaving(true)
@@ -643,6 +675,11 @@ export default function CostConsumptionInput() {
           <Input
             value={projectCode}
             onChange={(e) => setProjectCode(e.target.value)}
+            onBlur={() => {
+              if (projectCode.trim()) {
+                handleQueryByProjectCode()
+              }
+            }}
             placeholder="请输入项目编号"
             style={{ flex: 1, maxWidth: 400, borderRadius: 10, height: 42 }}
             onPressEnter={handleQueryByProjectCode}

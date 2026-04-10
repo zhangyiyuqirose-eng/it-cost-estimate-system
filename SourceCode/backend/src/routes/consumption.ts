@@ -489,18 +489,40 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
       return sendError(res, 403, '无权访问该项目')
     }
 
-    // 获取成本配置
+    // 获取成本配置 - 包含所有必要字段
     const projectCost = await prisma.projectCost.findFirst({
-      where: { projectId: Number(projectId) }
+      where: { projectId: Number(projectId) },
+      select: {
+        id: true,
+        contractAmount: true,
+        preSaleRatio: true,
+        taxRate: true,
+        externalLaborCost: true,
+        externalSoftwareCost: true,
+        otherCost: true,
+        currentManpowerCost: true,
+      }
     })
 
     if (!projectCost) {
       return sendError(res, 400, '请先保存项目成本信息')
     }
 
-    // 获取成员信息
+    // 获取成员信息 - 包含所有必要字段
     const members = await prisma.projectMember.findMany({
-      where: { projectId: Number(projectId) }
+      where: { projectId: Number(projectId) },
+      select: {
+        id: true,
+        name: true,
+        department: true,
+        level: true,
+        dailyCost: true,
+        role: true,
+        entryTime: true,
+        leaveTime: true,
+        isToEnd: true,
+        reportedHours: true,
+      }
     })
 
     if (members.length === 0) {
@@ -508,12 +530,12 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
     }
 
     // 计算各项成本
-    const contractAmount = projectCost.contractAmount
-    const preSaleRatio = projectCost.preSaleRatio
-    const taxRate = projectCost.taxRate
-    const externalLaborCost = projectCost.externalLaborCost
-    const externalSoftwareCost = projectCost.externalSoftwareCost
-    const otherCost = projectCost.otherCost || 0  // 新增：其它成本
+    const contractAmount = projectCost.contractAmount || 0
+    const preSaleRatio = projectCost.preSaleRatio || 0
+    const taxRate = projectCost.taxRate || 0.06
+    const externalLaborCost = projectCost.externalLaborCost || 0
+    const externalSoftwareCost = projectCost.externalSoftwareCost || 0
+    const otherCost = projectCost.otherCost || 0
 
     // 售前成本
     const preSaleCost = contractAmount * preSaleRatio
@@ -597,7 +619,13 @@ router.post('/:projectId/calculate', authMiddleware, async (req: Request, res: R
     sendResponse(res, response, '成本计算成功')
   } catch (error) {
     console.error('Calculate cost error:', error)
-    sendError(res, 500, '成本计算失败')
+    // 增强错误信息
+    if (error instanceof Error) {
+      console.error('Error stack:', error.stack)
+      sendError(res, 500, `成本计算失败: ${error.message}`)
+    } else {
+      sendError(res, 500, '成本计算失败，请稍后重试')
+    }
   }
 })
 

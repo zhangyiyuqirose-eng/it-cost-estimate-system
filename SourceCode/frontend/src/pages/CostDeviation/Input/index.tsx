@@ -578,7 +578,7 @@ export default function CostDeviationInput() {
         {uploading && (
           <div style={{ marginTop: 24 }}>
             <Progress
-              percent={uploadProgress}
+              percent={Math.floor(uploadProgress)}
               status={uploadProgress === 100 ? 'success' : 'active'}
               strokeColor={{
                 '0%': '#8B5CF6',

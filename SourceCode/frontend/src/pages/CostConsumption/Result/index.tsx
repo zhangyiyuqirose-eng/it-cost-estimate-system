@@ -645,7 +645,7 @@ export default function CostConsumptionResult() {
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
                 可消耗成本
               </Text>
-              <Text strong style={{ fontSize: 16, color: '#0f172a' }}>
+              <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
                 合同金额 × (1 - 售前比例) × (1 - 税率) - 外采成本 - 当前人力成本
               </Text>
             </div>
@@ -660,7 +660,7 @@ export default function CostConsumptionResult() {
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
                 日人力成本
               </Text>
-              <Text strong style={{ fontSize: 16, color: '#0f172a' }}>
+              <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
                 Σ(成员日成本) = P5:0.16, P6:0.21, P7:0.26, P8:0.36 万/天
               </Text>
             </div>
@@ -675,7 +675,7 @@ export default function CostConsumptionResult() {
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
                 可消耗天数
               </Text>
-              <Text strong style={{ fontSize: 16, color: '#0f172a' }}>
+              <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
                 可消耗成本 / 日人力成本
               </Text>
             </div>
@@ -690,7 +690,7 @@ export default function CostConsumptionResult() {
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
                 燃尽日期
               </Text>
-              <Text strong style={{ fontSize: 16, color: '#0f172a' }}>
+              <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
                 当前日期 + 可消耗天数
               </Text>
             </div>
@@ -720,14 +720,14 @@ export default function CostConsumptionResult() {
               style={{
                 padding: 16,
                 borderRadius: 12,
-                background: '#f8fafc',
+                background: '#ffffff',
                 border: '1px solid #f1f5f9',
                 textAlign: 'center',
               }}
             >
               <Text type="secondary" style={{ fontSize: 12 }}>合同金额</Text>
               <div>
-                <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                <Text strong style={{ fontSize: 20, color: '#0f172a' }}>
                   {result.contractAmount?.toFixed(2) || '-'}
                 </Text>
                 <Text type="secondary" style={{ fontSize: 12 }}> 万元</Text>
@@ -739,14 +739,14 @@ export default function CostConsumptionResult() {
               style={{
                 padding: 16,
                 borderRadius: 12,
-                background: '#f8fafc',
+                background: '#ffffff',
                 border: '1px solid #f1f5f9',
                 textAlign: 'center',
               }}
             >
               <Text type="secondary" style={{ fontSize: 12 }}>售前比例</Text>
               <div>
-                <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                <Text strong style={{ fontSize: 20, color: '#0f172a' }}>
                   {result.preSaleRatio ? `${(result.preSaleRatio * 100).toFixed(2)}%` : '-'}
                 </Text>
               </div>
@@ -757,14 +757,14 @@ export default function CostConsumptionResult() {
               style={{
                 padding: 16,
                 borderRadius: 12,
-                background: '#f8fafc',
+                background: '#ffffff',
                 border: '1px solid #f1f5f9',
                 textAlign: 'center',
               }}
             >
               <Text type="secondary" style={{ fontSize: 12 }}>税率</Text>
               <div>
-                <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                <Text strong style={{ fontSize: 20, color: '#0f172a' }}>
                   {result.taxRate ? `${(result.taxRate * 100).toFixed(2)}%` : '-'}
                 </Text>
               </div>
@@ -775,14 +775,14 @@ export default function CostConsumptionResult() {
               style={{
                 padding: 16,
                 borderRadius: 12,
-                background: '#f8fafc',
+                background: '#ffffff',
                 border: '1px solid #f1f5f9',
                 textAlign: 'center',
               }}
             >
               <Text type="secondary" style={{ fontSize: 12 }}>外采人力成本</Text>
               <div>
-                <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                <Text strong style={{ fontSize: 20, color: '#0f172a' }}>
                   {result.externalLaborCost?.toFixed(2) || '-'}
                 </Text>
                 <Text type="secondary" style={{ fontSize: 12 }}> 万元</Text>
@@ -794,14 +794,14 @@ export default function CostConsumptionResult() {
               style={{
                 padding: 16,
                 borderRadius: 12,
-                background: '#f8fafc',
+                background: '#ffffff',
                 border: '1px solid #f1f5f9',
                 textAlign: 'center',
               }}
             >
               <Text type="secondary" style={{ fontSize: 12 }}>外采软件成本</Text>
               <div>
-                <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                <Text strong style={{ fontSize: 20, color: '#0f172a' }}>
                   {result.externalSoftwareCost?.toFixed(2) || '-'}
                 </Text>
                 <Text type="secondary" style={{ fontSize: 12 }}> 万元</Text>
@@ -813,14 +813,14 @@ export default function CostConsumptionResult() {
               style={{
                 padding: 16,
                 borderRadius: 12,
-                background: '#f8fafc',
+                background: '#ffffff',
                 border: '1px solid #f1f5f9',
                 textAlign: 'center',
               }}
             >
               <Text type="secondary" style={{ fontSize: 12 }}>当前人力成本</Text>
               <div>
-                <Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                <Text strong style={{ fontSize: 20, color: '#0f172a' }}>
                   {result.currentManpowerCost?.toFixed(2) || '-'}
                 </Text>
                 <Text type="secondary" style={{ fontSize: 12 }}> 万元</Text>
@@ -828,6 +828,72 @@ export default function CostConsumptionResult() {
             </div>
           </Col>
         </Row>
+      </Card>
+
+      {/* 项目人员信息展示 */}
+      <Card
+        style={{
+          borderRadius: 20,
+          marginBottom: 24,
+          border: '1px solid #f1f5f9',
+        }}
+      >
+        <div style={{ marginBottom: 20 }}>
+          <Title level={4} style={{ marginBottom: 4, fontWeight: 600 }}>
+            <TeamOutlined style={{ marginRight: 8, color: '#10B981' }} />
+            项目人员信息
+          </Title>
+          <Text type="secondary">当前项目团队成员详情</Text>
+        </div>
+
+        <Table
+          columns={[
+            {
+              title: '姓名',
+              dataIndex: 'name',
+              key: 'name',
+              width: 120,
+              render: (v: string) => <Text strong>{v || '-'}</Text>
+            },
+            {
+              title: '等级',
+              dataIndex: 'level',
+              key: 'level',
+              width: 100,
+              render: (v: string) => (
+                <Tag style={{ borderRadius: 8, background: '#3B82F615', color: '#3B82F6', border: 'none' }}>
+                  {v || '-'}
+                </Tag>
+              )
+            },
+            {
+              title: '日成本(万元)',
+              dataIndex: 'dailyCost',
+              key: 'dailyCost',
+              width: 120,
+              render: (v: number) => v?.toFixed(2) || '-'
+            },
+            {
+              title: '入项时间',
+              dataIndex: 'entryTime',
+              key: 'entryTime',
+              width: 150,
+              render: (v: string) => v ? dayjs(v).format('YYYY-MM-DD') : '-'
+            },
+            {
+              title: '离项时间',
+              dataIndex: 'leaveTime',
+              key: 'leaveTime',
+              width: 150,
+              render: (v: string, r: any) => r.isToEnd ? '至结项' : (v ? dayjs(v).format('YYYY-MM-DD') : '-')
+            },
+          ]}
+          dataSource={result?.teamMembers || []}
+          rowKey="memberId"
+          pagination={false}
+          size="small"
+          locale={{ emptyText: '暂无人员信息' }}
+        />
       </Card>
 
       {/* 人员方案调整区域 */}
